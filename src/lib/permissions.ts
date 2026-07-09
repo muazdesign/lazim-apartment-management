@@ -34,7 +34,11 @@ export const permissions = {
   exportReports: MANAGER_UP,
   viewTaxes: MANAGER_UP,
   manageTaxParameters: MANAGER_UP,
-  manageUsers: ["tech_admin"] as UserRole[],
+  manageUsers: MANAGER_UP,
+  // Managers may not create tech admins, promote anyone to tech
+  // admin, or edit/deactivate a tech admin account (also enforced
+  // by the prevent_role_escalation trigger and the users API).
+  manageTechAdmins: ["tech_admin"] as UserRole[],
   viewAuditLogs: ["tech_admin"] as UserRole[],
 } as const;
 

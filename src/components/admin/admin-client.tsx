@@ -5,7 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { AuditLog, Profile, UserRole } from "@/lib/database.types";
-import { ROLE_LABELS } from "@/lib/permissions";
+import { can, ROLE_LABELS } from "@/lib/permissions";
 import { formatDateTime } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -40,9 +40,9 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { UserPlus, UserX } from "lucide-react";
+import { Pencil, UserPlus, UserX } from "lucide-react";
 
-function NewUserDialog() {
+function NewUserDialog({ canManageTechAdmins }: { canManageTechAdmins: boolean }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [email, setEmail] = useState("");
@@ -141,9 +141,11 @@ function NewUserDialog() {
                 <SelectItem value="manager">
                   Manager — full operations and financials
                 </SelectItem>
-                <SelectItem value="tech_admin">
-                  Tech Admin — everything, including system settings
-                </SelectItem>
+                {canManageTechAdmins && (
+                  <SelectItem value="tech_admin">
+                    Tech Admin — everything, including system settings
+                  </SelectItem>
+                )}
               </SelectContent>
             </Select>
           </div>
@@ -166,8 +168,172 @@ function NewUserDialog() {
   );
 }
 
-export function AdminClient() {
+function EditUserDialog({
+  profile,
+  canManageTechAdmins,
+}: {
+  profile: Profile;
+  canManageTechAdmins: boolean;
+}) {
   const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [email, setEmail] = useState(profile.email);
+  const [fullName, setFullName] = useState(profile.full_name);
+  const [password, setPassword] = useState("");
+  const [role, setRole] = useState<UserRole>(profile.role);
+
+  const mutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/admin/users/${profile.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          full_name: fullName,
+          role,
+          ...(password ? { password } : {}),
+        }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["profiles"] });
+      toast.success(`Account updated for ${email}.`);
+      setOpen(false);
+      setPassword("");
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (next) {
+          // Start each edit from the row's current values.
+          setEmail(profile.email);
+          setFullName(profile.full_name);
+          setRole(profile.role);
+          setPassword("");
+        }
+      }}
+    >
+      <DialogTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10"
+            aria-label={`Edit ${profile.full_name || profile.email}`}
+          />
+        }
+      >
+        <Pencil className="h-4 w-4" />
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-xl">
+            Edit {profile.full_name || profile.email}
+          </DialogTitle>
+          <DialogDescription className="text-base">
+            Change their details or role. Set a new password only if they need
+            one — leave it blank to keep the current password.
+          </DialogDescription>
+        </DialogHeader>
+        <form
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (password && password.length < 8)
+              return toast.error("The password needs at least 8 characters.");
+            mutation.mutate();
+          }}
+        >
+          <div className="space-y-2">
+            <Label className="text-base">Full name</Label>
+            <Input
+              className="h-11"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-base">Email</Label>
+            <Input
+              className="h-11"
+              type="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-base">New password (optional)</Label>
+            <Input
+              className="h-11"
+              type="text"
+              minLength={8}
+              placeholder="Leave blank to keep the current one"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label className="text-base">Role</Label>
+            <Select
+              items={ROLE_LABELS}
+              value={role}
+              onValueChange={(v) => setRole(v as UserRole)}
+            >
+              <SelectTrigger className="h-11">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="secretary">
+                  Secretary — day-to-day tasks, no financial totals
+                </SelectItem>
+                <SelectItem value="manager">
+                  Manager — full operations and financials
+                </SelectItem>
+                {canManageTechAdmins && (
+                  <SelectItem value="tech_admin">
+                    Tech Admin — everything, including system settings
+                  </SelectItem>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
+          <DialogFooter className="gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11"
+              onClick={() => setOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" className="h-11" disabled={mutation.isPending}>
+              {mutation.isPending ? "Saving…" : "Save changes"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export function AdminClient({
+  currentRole,
+  currentUserId,
+}: {
+  currentRole: UserRole;
+  currentUserId: string;
+}) {
+  const queryClient = useQueryClient();
+  const canManageTechAdmins = can(currentRole, "manageTechAdmins");
+  const showAuditLogs = can(currentRole, "viewAuditLogs");
 
   const { data: profiles, isLoading } = useQuery({
     queryKey: ["profiles"],
@@ -184,6 +350,7 @@ export function AdminClient() {
 
   const { data: logs, isLoading: logsLoading } = useQuery({
     queryKey: ["audit-logs"],
+    enabled: showAuditLogs,
     queryFn: async (): Promise<AuditLog[]> => {
       const supabase = createClient();
       const { data, error } = await supabase
@@ -221,7 +388,11 @@ export function AdminClient() {
     <div>
       <PageHeader
         title="Administration"
-        description="Manage staff accounts and review everything that has happened in the system."
+        description={
+          showAuditLogs
+            ? "Manage staff accounts and review everything that has happened in the system."
+            : "Manage staff accounts."
+        }
       />
 
       <Tabs defaultValue="users">
@@ -229,14 +400,16 @@ export function AdminClient() {
           <TabsTrigger value="users" className="h-9 px-4 text-[15px]">
             Staff accounts
           </TabsTrigger>
-          <TabsTrigger value="logs" className="h-9 px-4 text-[15px]">
-            System activity log
-          </TabsTrigger>
+          {showAuditLogs && (
+            <TabsTrigger value="logs" className="h-9 px-4 text-[15px]">
+              System activity log
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="users">
           <div className="mb-4 flex justify-end">
-            <NewUserDialog />
+            <NewUserDialog canManageTechAdmins={canManageTechAdmins} />
           </div>
           <Card>
             <CardContent className="p-0">
@@ -253,102 +426,99 @@ export function AdminClient() {
                       <TableHead className="text-base">Person</TableHead>
                       <TableHead className="text-base">Role</TableHead>
                       <TableHead className="text-base">Status</TableHead>
-                      <TableHead className="w-24" />
+                      <TableHead className="w-32" />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {(profiles ?? []).map((p) => (
-                      <TableRow
-                        key={p.id}
-                        className={!p.is_active ? "opacity-50" : undefined}
-                      >
-                        <TableCell>
-                          <p className="text-[15px] font-medium">
-                            {p.full_name || "(no name)"}
-                          </p>
-                          <p className="text-sm text-muted-foreground">
-                            {p.email}
-                          </p>
-                        </TableCell>
-                        <TableCell>
-                          <Select
-                            items={ROLE_LABELS}
-                            value={p.role}
-                            onValueChange={(v) =>
-                              updateProfile.mutate({
-                                id: p.id,
-                                role: v as UserRole,
-                              })
-                            }
-                          >
-                            <SelectTrigger className="h-10 w-40">
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {(
-                                Object.entries(ROLE_LABELS) as [
-                                  UserRole,
-                                  string,
-                                ][]
-                              ).map(([value, label]) => (
-                                <SelectItem key={value} value={value}>
-                                  {label}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              p.is_active
-                                ? "rounded-full bg-green-50 text-green-700"
-                                : "rounded-full bg-muted text-muted-foreground"
-                            }
-                          >
-                            {p.is_active ? "Active" : "Deactivated"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <ConfirmDialog
-                            title={
-                              p.is_active
-                                ? `Deactivate ${p.full_name || p.email}?`
-                                : `Reactivate ${p.full_name || p.email}?`
-                            }
-                            description={
-                              p.is_active
-                                ? "They will be signed out and unable to log in until reactivated. No data is lost."
-                                : "They will be able to sign in again."
-                            }
-                            confirmLabel={
-                              p.is_active ? "Yes, deactivate" : "Yes, reactivate"
-                            }
-                            onConfirm={() =>
-                              updateProfile.mutateAsync({
-                                id: p.id,
-                                is_active: !p.is_active,
-                              })
-                            }
-                            trigger={
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-10 w-10 text-red-600 hover:text-red-700"
-                                aria-label={
-                                  p.is_active
-                                    ? "Deactivate account"
-                                    : "Reactivate account"
-                                }
-                              >
-                                <UserX className="h-4 w-4" />
-                              </Button>
-                            }
-                          />
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {(profiles ?? []).map((p) => {
+                      // Managers can't edit or deactivate tech admins
+                      // (the database blocks it too — this just hides
+                      // buttons that would only show an error).
+                      const canManageRow =
+                        canManageTechAdmins || p.role !== "tech_admin";
+                      return (
+                        <TableRow
+                          key={p.id}
+                          className={!p.is_active ? "opacity-50" : undefined}
+                        >
+                          <TableCell>
+                            <p className="text-[15px] font-medium">
+                              {p.full_name || "(no name)"}
+                              {p.id === currentUserId && (
+                                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                                  (you)
+                                </span>
+                              )}
+                            </p>
+                            <p className="text-sm text-muted-foreground">
+                              {p.email}
+                            </p>
+                          </TableCell>
+                          <TableCell className="text-[15px]">
+                            {ROLE_LABELS[p.role]}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className={
+                                p.is_active
+                                  ? "rounded-full bg-green-50 text-green-700"
+                                  : "rounded-full bg-muted text-muted-foreground"
+                              }
+                            >
+                              {p.is_active ? "Active" : "Deactivated"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            {canManageRow && (
+                              <div className="flex justify-end gap-1">
+                                <EditUserDialog
+                                  profile={p}
+                                  canManageTechAdmins={canManageTechAdmins}
+                                />
+                                <ConfirmDialog
+                                  title={
+                                    p.is_active
+                                      ? `Deactivate ${p.full_name || p.email}?`
+                                      : `Reactivate ${p.full_name || p.email}?`
+                                  }
+                                  description={
+                                    p.is_active
+                                      ? "They will be signed out and unable to log in until reactivated. No data is lost."
+                                      : "They will be able to sign in again."
+                                  }
+                                  confirmLabel={
+                                    p.is_active
+                                      ? "Yes, deactivate"
+                                      : "Yes, reactivate"
+                                  }
+                                  onConfirm={() =>
+                                    updateProfile.mutateAsync({
+                                      id: p.id,
+                                      is_active: !p.is_active,
+                                    })
+                                  }
+                                  trigger={
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-10 w-10 text-red-600 hover:text-red-700"
+                                      aria-label={
+                                        p.is_active
+                                          ? "Deactivate account"
+                                          : "Reactivate account"
+                                      }
+                                    >
+                                      <UserX className="h-4 w-4" />
+                                    </Button>
+                                  }
+                                />
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
@@ -356,59 +526,61 @@ export function AdminClient() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="logs">
-          <Card>
-            <CardContent className="p-0">
-              {logsLoading ? (
-                <div className="space-y-3 p-6">
-                  {[...Array(5)].map((_, i) => (
-                    <Skeleton key={i} className="h-10" />
-                  ))}
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-base">When</TableHead>
-                      <TableHead className="text-base">Action</TableHead>
-                      <TableHead className="text-base">Table</TableHead>
-                      <TableHead className="text-base">Record</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {(logs ?? []).map((l) => (
-                      <TableRow key={l.id}>
-                        <TableCell className="whitespace-nowrap text-[15px]">
-                          {formatDateTime(l.created_at)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="secondary"
-                            className={
-                              l.action === "DELETE"
-                                ? "rounded-full bg-red-50 text-red-700"
-                                : l.action === "INSERT"
-                                  ? "rounded-full bg-green-50 text-green-700"
-                                  : "rounded-full bg-blue-50 text-blue-700"
-                            }
-                          >
-                            {l.action}
-                          </Badge>
-                        </TableCell>
-                        <TableCell className="text-[15px]">
-                          {l.table_name}
-                        </TableCell>
-                        <TableCell className="font-mono text-sm text-muted-foreground">
-                          {l.record_id?.slice(0, 8) ?? "—"}
-                        </TableCell>
-                      </TableRow>
+        {showAuditLogs && (
+          <TabsContent value="logs">
+            <Card>
+              <CardContent className="p-0">
+                {logsLoading ? (
+                  <div className="space-y-3 p-6">
+                    {[...Array(5)].map((_, i) => (
+                      <Skeleton key={i} className="h-10" />
                     ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                  </div>
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="text-base">When</TableHead>
+                        <TableHead className="text-base">Action</TableHead>
+                        <TableHead className="text-base">Table</TableHead>
+                        <TableHead className="text-base">Record</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(logs ?? []).map((l) => (
+                        <TableRow key={l.id}>
+                          <TableCell className="whitespace-nowrap text-[15px]">
+                            {formatDateTime(l.created_at)}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="secondary"
+                              className={
+                                l.action === "DELETE"
+                                  ? "rounded-full bg-red-50 text-red-700"
+                                  : l.action === "INSERT"
+                                    ? "rounded-full bg-green-50 text-green-700"
+                                    : "rounded-full bg-blue-50 text-blue-700"
+                              }
+                            >
+                              {l.action}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-[15px]">
+                            {l.table_name}
+                          </TableCell>
+                          <TableCell className="font-mono text-sm text-muted-foreground">
+                            {l.record_id?.slice(0, 8) ?? "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );

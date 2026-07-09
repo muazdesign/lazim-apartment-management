@@ -17,7 +17,11 @@ jsPDF + xlsx exports.
 | Payments, expenses, financial dashboard | ✅ | ✅ | ❌ |
 | Documents | manage | approve/delete | view + upload |
 | Yearly tax calculation | ✅ | ✅ | ❌ |
-| Tax parameters, staff accounts, audit log | ✅ | ❌ | ❌ |
+| Staff accounts | manage | manage (not Tech Admins) | ❌ |
+| Tax parameters, audit log | ✅ | ❌ | ❌ |
+
+Managers can create and edit staff accounts, but only a Tech Admin can
+create, promote, or modify a Tech Admin account.
 
 Enforced twice: in Postgres **RLS policies** (the real gatekeeper,
 `supabase/migrations/0002_rls.sql`) and mirrored in the UI

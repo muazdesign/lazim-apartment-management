@@ -3,7 +3,8 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 
 /**
- * POST /api/admin/users — create a staff account (Tech Admin only).
+ * POST /api/admin/users — create a staff account (Tech Admin or Manager).
+ * Managers may not create Tech Admin accounts.
  * Uses the service-role key, so authorization is checked explicitly here
  * in addition to RLS.
  */
@@ -22,9 +23,9 @@ export async function POST(request: Request) {
     .eq("id", user.id)
     .single();
 
-  if (!me?.is_active || me.role !== "tech_admin") {
+  if (!me?.is_active || !["tech_admin", "manager"].includes(me.role)) {
     return NextResponse.json(
-      { error: "Only a Tech Admin can create accounts" },
+      { error: "Only a Tech Admin or Manager can create accounts" },
       { status: 403 }
     );
   }
@@ -41,6 +42,13 @@ export async function POST(request: Request) {
     return NextResponse.json(
       { error: "Email, a password of at least 8 characters, and a valid role are required" },
       { status: 400 }
+    );
+  }
+
+  if (me.role === "manager" && role === "tech_admin") {
+    return NextResponse.json(
+      { error: "Only a Tech Admin can create Tech Admin accounts" },
+      { status: 403 }
     );
   }
 
