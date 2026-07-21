@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
@@ -40,7 +40,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { UserPlus, UserX } from "lucide-react";
+import {
+  UserPlus,
+  UserX,
+  Users,
+  Building2,
+  FileKey2,
+  Wallet,
+  FileText,
+  UserCog,
+  Calculator,
+  ScrollText,
+  Trash2,
+  AlertTriangle,
+  TriangleAlert,
+} from "lucide-react";
 
 function NewUserDialog() {
   const queryClient = useQueryClient();
@@ -166,6 +180,407 @@ function NewUserDialog() {
   );
 }
 
+/* ------------------------------------------------------------------ */
+/*  DATA WIPE CATEGORY DEFINITIONS                                     */
+/* ------------------------------------------------------------------ */
+
+interface WipeCategory {
+  key: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  tables: string[]; // tables to count
+}
+
+const WIPE_CATEGORIES: WipeCategory[] = [
+  {
+    key: "tenants",
+    label: "Tenants",
+    description:
+      "All tenant records and their linked leases, invoices, and payments",
+    icon: <Users className="h-5 w-5" />,
+    tables: ["tenants"],
+  },
+  {
+    key: "units",
+    label: "Units",
+    description:
+      "All apartment, shop, and other unit records (leases must go too)",
+    icon: <Building2 className="h-5 w-5" />,
+    tables: ["units"],
+  },
+  {
+    key: "leases",
+    label: "Leases",
+    description: "All lease agreements plus their invoices and payments",
+    icon: <FileKey2 className="h-5 w-5" />,
+    tables: ["leases"],
+  },
+  {
+    key: "finance",
+    label: "Finance",
+    description: "Invoices, payments, expenses, and payment reminders",
+    icon: <Wallet className="h-5 w-5" />,
+    tables: ["invoices", "payments", "expenses"],
+  },
+  {
+    key: "documents",
+    label: "Documents",
+    description: "All uploaded files and their metadata",
+    icon: <FileText className="h-5 w-5" />,
+    tables: ["documents"],
+  },
+  {
+    key: "staff",
+    label: "Staff accounts",
+    description:
+      "All staff profiles except your own account (so you stay logged in)",
+    icon: <UserCog className="h-5 w-5" />,
+    tables: ["profiles"],
+  },
+  {
+    key: "tax",
+    label: "Tax data",
+    description: "Tax parameters and computed yearly filings",
+    icon: <Calculator className="h-5 w-5" />,
+    tables: ["tax_parameters", "tax_filings"],
+  },
+  {
+    key: "audit_logs",
+    label: "Audit logs",
+    description: "System activity history",
+    icon: <ScrollText className="h-5 w-5" />,
+    tables: ["audit_logs"],
+  },
+];
+
+/* ------------------------------------------------------------------ */
+/*  DATA MANAGEMENT TAB                                                */
+/* ------------------------------------------------------------------ */
+
+function DataWipeTab() {
+  const queryClient = useQueryClient();
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
+
+  // Fetch row counts for every category
+  const { data: counts, isLoading: countsLoading } = useQuery({
+    queryKey: ["data-wipe-counts"],
+    queryFn: async (): Promise<Record<string, number>> => {
+      const supabase = createClient();
+      const result: Record<string, number> = {};
+
+      const tablesToCount = [
+        "tenants",
+        "units",
+        "leases",
+        "invoices",
+        "payments",
+        "expenses",
+        "documents",
+        "profiles",
+        "tax_parameters",
+        "tax_filings",
+        "audit_logs",
+      ];
+
+      await Promise.all(
+        tablesToCount.map(async (table) => {
+          const { count } = await supabase
+            .from(table)
+            .select("*", { count: "exact", head: true });
+          result[table] = count ?? 0;
+        })
+      );
+
+      return result;
+    },
+  });
+
+  const wipeMutation = useMutation({
+    mutationFn: async (categories: string[]) => {
+      const res = await fetch("/api/admin/data-wipe", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ categories }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Wipe failed");
+      return data;
+    },
+    onSuccess: (data) => {
+      const totalDeleted = Object.values(
+        data.deleted as Record<string, number>
+      ).reduce((a: number, b: number) => a + b, 0);
+      toast.success(
+        `Wipe complete — ${totalDeleted.toLocaleString()} record${totalDeleted !== 1 ? "s" : ""} deleted.`
+      );
+      setSelected(new Set());
+      setConfirmOpen(false);
+      setConfirmText("");
+      // Refresh everything
+      queryClient.invalidateQueries();
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const toggleCategory = useCallback((key: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  const toggleAll = useCallback(() => {
+    setSelected((prev) => {
+      if (prev.size === WIPE_CATEGORIES.length) return new Set();
+      return new Set(WIPE_CATEGORIES.map((c) => c.key));
+    });
+  }, []);
+
+  const allSelected = selected.size === WIPE_CATEGORIES.length;
+
+  const getCategoryCount = (cat: WipeCategory): number => {
+    if (!counts) return 0;
+    return cat.tables.reduce((sum, t) => sum + (counts[t] ?? 0), 0);
+  };
+
+  const totalSelected = WIPE_CATEGORIES.filter((c) =>
+    selected.has(c.key)
+  ).reduce((sum, c) => sum + getCategoryCount(c), 0);
+
+  return (
+    <div className="space-y-6">
+      {/* Warning banner */}
+      <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4">
+        <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-red-600" />
+        <div>
+          <p className="text-[15px] font-semibold text-red-800">
+            Danger zone — permanent data deletion
+          </p>
+          <p className="mt-1 text-sm text-red-700">
+            Deleting data here is <strong>irreversible</strong>. This is not the
+            same as archiving — rows are permanently removed from the database.
+            Only use this to start fresh or clean up test data.
+          </p>
+        </div>
+      </div>
+
+      {/* Category cards */}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {WIPE_CATEGORIES.map((cat) => {
+          const checked = selected.has(cat.key);
+          const count = getCategoryCount(cat);
+          return (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => toggleCategory(cat.key)}
+              className={`flex items-start gap-3 rounded-lg border p-4 text-left transition-all ${
+                checked
+                  ? "border-red-300 bg-red-50/80 ring-2 ring-red-200"
+                  : "border-border bg-card hover:border-muted-foreground/30"
+              }`}
+            >
+              {/* Checkbox */}
+              <div
+                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
+                  checked
+                    ? "border-red-600 bg-red-600 text-white"
+                    : "border-muted-foreground/40"
+                }`}
+              >
+                {checked && (
+                  <svg
+                    className="h-3 w-3"
+                    viewBox="0 0 12 12"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M2 6l3 3 5-5" />
+                  </svg>
+                )}
+              </div>
+
+              {/* Icon + text */}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <span
+                    className={checked ? "text-red-700" : "text-muted-foreground"}
+                  >
+                    {cat.icon}
+                  </span>
+                  <span className="text-[15px] font-medium">{cat.label}</span>
+                  {countsLoading ? (
+                    <Skeleton className="h-5 w-10 rounded-full" />
+                  ) : (
+                    <Badge
+                      variant="secondary"
+                      className="rounded-full tabular-nums"
+                    >
+                      {count.toLocaleString()} row{count !== 1 ? "s" : ""}
+                    </Badge>
+                  )}
+                </div>
+                <p className="mt-0.5 text-sm text-muted-foreground">
+                  {cat.description}
+                </p>
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Select all + Delete button */}
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-dashed border-muted-foreground/30 p-4">
+        <button
+          type="button"
+          onClick={toggleAll}
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <div
+            className={`flex h-5 w-5 items-center justify-center rounded border-2 transition-colors ${
+              allSelected
+                ? "border-red-600 bg-red-600 text-white"
+                : "border-muted-foreground/40"
+            }`}
+          >
+            {allSelected && (
+              <svg
+                className="h-3 w-3"
+                viewBox="0 0 12 12"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M2 6l3 3 5-5" />
+              </svg>
+            )}
+          </div>
+          {allSelected ? "Deselect all" : "Wipe everything"}
+        </button>
+
+        <Dialog
+          open={confirmOpen}
+          onOpenChange={(v) => {
+            setConfirmOpen(v);
+            if (!v) setConfirmText("");
+          }}
+        >
+          <DialogTrigger
+            render={
+              <Button
+                className="h-11 gap-2 bg-red-600 text-white hover:bg-red-700"
+                disabled={selected.size === 0}
+              />
+            }
+          >
+            <Trash2 className="h-4 w-4" aria-hidden />
+            Delete selected data
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2 text-xl text-red-700">
+                <TriangleAlert className="h-5 w-5" />
+                Confirm permanent deletion
+              </DialogTitle>
+              <DialogDescription className="text-base">
+                You are about to <strong>permanently delete</strong> data from
+                the following categories. This cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4">
+              {/* Selected categories summary */}
+              <div className="rounded-md border bg-muted/50 p-3">
+                <ul className="space-y-1">
+                  {WIPE_CATEGORIES.filter((c) => selected.has(c.key)).map(
+                    (cat) => (
+                      <li
+                        key={cat.key}
+                        className="flex items-center gap-2 text-sm"
+                      >
+                        <span className="text-red-600">{cat.icon}</span>
+                        <span className="font-medium">{cat.label}</span>
+                        <span className="text-muted-foreground">
+                          — {getCategoryCount(cat).toLocaleString()} row
+                          {getCategoryCount(cat) !== 1 ? "s" : ""}
+                        </span>
+                      </li>
+                    )
+                  )}
+                </ul>
+                <div className="mt-2 border-t pt-2 text-sm font-semibold">
+                  Total: {totalSelected.toLocaleString()} record
+                  {totalSelected !== 1 ? "s" : ""} will be deleted
+                </div>
+              </div>
+
+              {/* Type DELETE to confirm */}
+              <div className="space-y-2">
+                <Label className="text-base">
+                  Type{" "}
+                  <span className="rounded bg-red-100 px-1.5 py-0.5 font-mono text-sm font-bold text-red-700">
+                    DELETE
+                  </span>{" "}
+                  to confirm
+                </Label>
+                <Input
+                  className="h-11 font-mono"
+                  placeholder="Type DELETE here…"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="h-11"
+                onClick={() => {
+                  setConfirmOpen(false);
+                  setConfirmText("");
+                }}
+                disabled={wipeMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="h-11 bg-red-600 text-white hover:bg-red-700"
+                disabled={
+                  confirmText !== "DELETE" || wipeMutation.isPending
+                }
+                onClick={() => {
+                  const cats = allSelected
+                    ? ["all"]
+                    : Array.from(selected);
+                  wipeMutation.mutate(cats);
+                }}
+              >
+                {wipeMutation.isPending
+                  ? "Deleting…"
+                  : "Permanently delete"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      </div>
+    </div>
+  );
+}
+
 export function AdminClient() {
   const queryClient = useQueryClient();
 
@@ -231,6 +646,10 @@ export function AdminClient() {
           </TabsTrigger>
           <TabsTrigger value="logs" className="h-9 px-4 text-[15px]">
             System activity log
+          </TabsTrigger>
+          <TabsTrigger value="data" className="h-9 gap-1.5 px-4 text-[15px]">
+            <Trash2 className="h-3.5 w-3.5" aria-hidden />
+            Data management
           </TabsTrigger>
         </TabsList>
 
@@ -408,6 +827,10 @@ export function AdminClient() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="data">
+          <DataWipeTab />
         </TabsContent>
       </Tabs>
     </div>

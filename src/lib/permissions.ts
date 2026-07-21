@@ -36,6 +36,7 @@ export const permissions = {
   manageTaxParameters: MANAGER_UP,
   manageUsers: ["tech_admin"] as UserRole[],
   viewAuditLogs: ["tech_admin"] as UserRole[],
+  wipeData: ["tech_admin"] as UserRole[],
 } as const;
 
 export type Permission = keyof typeof permissions;
