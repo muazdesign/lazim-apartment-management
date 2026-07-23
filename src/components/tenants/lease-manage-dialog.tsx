@@ -20,6 +20,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { LogOut } from "lucide-react";
+import { EthiopianDatePicker } from "@/components/ui/ethiopian-date-picker";
 
 type LeaseWithUnit = Lease & { units: { unit_number: string } | null };
 
@@ -127,13 +128,11 @@ export function LeaseManageDialog({
                 onChange={(e) => setRent(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-base">Lease ends</Label>
-              <Input
-                className="h-11"
-                type="date"
+            <div className="col-span-1">
+              <EthiopianDatePicker
+                label="Lease ends"
                 value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
+                onChange={setEndDate}
               />
             </div>
             <div className="space-y-2">
@@ -142,7 +141,7 @@ export function LeaseManageDialog({
                 className="h-11"
                 type="number"
                 min="1"
-                max="28"
+                max="30"
                 value={dueDay}
                 onChange={(e) => setDueDay(e.target.value)}
               />

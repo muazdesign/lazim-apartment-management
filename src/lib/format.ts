@@ -1,5 +1,5 @@
 import { format, parseISO } from "date-fns";
-
+import { formatEthDate, formatEthDateTime } from "./ethiopian-calendar";
 // Ethiopian Birr. Shown as "Br 1,234.00" — the common local convention.
 // To change the currency later, edit the symbol and number format here only.
 const CURRENCY_SYMBOL = "Br";
@@ -14,14 +14,12 @@ export function formatMoney(value: number | null | undefined) {
 
 export function formatDate(value: string | Date | null | undefined) {
   if (!value) return "—";
-  const d = typeof value === "string" ? parseISO(value) : value;
-  return format(d, "MMM d, yyyy");
+  return formatEthDate(value);
 }
 
 export function formatDateTime(value: string | Date | null | undefined) {
   if (!value) return "—";
-  const d = typeof value === "string" ? parseISO(value) : value;
-  return format(d, "MMM d, yyyy h:mm a");
+  return formatEthDateTime(value);
 }
 
 export function formatFileSize(bytes: number | null | undefined) {

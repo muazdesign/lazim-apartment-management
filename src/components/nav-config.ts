@@ -50,6 +50,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "System",
     items: [
       { href: "/admin", label: "Administration", icon: ShieldCheck, permission: "manageUsers" },
+      { href: "/settings", label: "Settings", icon: ShieldCheck, permission: "viewTenants" },
     ],
   },
 ];

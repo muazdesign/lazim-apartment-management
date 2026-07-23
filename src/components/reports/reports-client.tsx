@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { createClient } from "@/lib/supabase/client";
 import { formatMoney } from "@/lib/format";
+import { ETH_MONTHS, currentEthYear, ethYearToGregRange, toEth } from "@/lib/ethiopian-calendar";
 import { PageHeader } from "@/components/shared/page-header";
 import { ExportButtons } from "@/components/shared/export-buttons";
 import {
@@ -38,7 +39,7 @@ interface MonthRow {
 }
 
 export function ReportsClient() {
-  const currentYear = new Date().getFullYear();
+  const currentYear = currentEthYear();
   const [year, setYear] = useState(String(currentYear));
   const years = Array.from({ length: 5 }, (_, i) => String(currentYear - i));
 
@@ -46,8 +47,7 @@ export function ReportsClient() {
     queryKey: ["profit-report", year],
     queryFn: async (): Promise<MonthRow[]> => {
       const supabase = createClient();
-      const from = `${year}-01-01`;
-      const to = `${year}-12-31`;
+      const { from, to } = ethYearToGregRange(Number(year));
 
       const [paymentsRes, expensesRes] = await Promise.all([
         supabase
@@ -65,23 +65,23 @@ export function ReportsClient() {
       if (paymentsRes.error) throw paymentsRes.error;
       if (expensesRes.error) throw expensesRes.error;
 
-      const months: MonthRow[] = Array.from({ length: 12 }, (_, i) => ({
-        month: new Date(Number(year), i, 1).toLocaleString("en-US", {
-          month: "long",
-        }),
+      const months: MonthRow[] = Array.from({ length: 13 }, (_, i) => ({
+        month: ETH_MONTHS[i + 1],
         income: 0,
         expenses: 0,
         profit: 0,
       }));
 
       for (const p of paymentsRes.data as { amount: number; paid_at: string }[]) {
-        months[new Date(p.paid_at).getMonth()].income += p.amount;
+        const eth = toEth(p.paid_at);
+        months[eth.month - 1].income += p.amount;
       }
       for (const e of expensesRes.data as {
         amount: number;
         incurred_on: string;
       }[]) {
-        months[new Date(e.incurred_on).getMonth()].expenses += e.amount;
+        const eth = toEth(e.incurred_on);
+        months[eth.month - 1].expenses += e.amount;
       }
       for (const m of months) m.profit = m.income - m.expenses;
       return months;

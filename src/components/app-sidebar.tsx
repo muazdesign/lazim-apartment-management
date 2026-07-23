@@ -76,12 +76,15 @@ export function AppSidebar() {
       </nav>
 
       <div className="border-t p-4">
-        <div className="mb-3 px-1">
+        <Link
+          href="/settings"
+          className="mb-3 flex flex-col px-2 py-1.5 rounded-lg hover:bg-sidebar-accent transition-colors"
+        >
           <p className="truncate font-medium">{profile.full_name || profile.email}</p>
           <p className="text-sm text-muted-foreground">
             {ROLE_LABELS[profile.role]}
           </p>
-        </div>
+        </Link>
         <Button
           variant="outline"
           className="h-11 w-full justify-start gap-2 text-[15px]"

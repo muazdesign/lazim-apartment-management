@@ -24,6 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { EthiopianDatePicker } from "@/components/ui/ethiopian-date-picker";
 
 /** Assign a unit to a tenant by creating an active lease. */
 export function LeaseFormDialog({
@@ -161,26 +162,16 @@ export function LeaseFormDialog({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <Label htmlFor="start" className="text-base">Lease starts</Label>
-              <Input
-                id="start"
-                type="date"
-                className="h-11"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="end" className="text-base">Lease ends</Label>
-              <Input
-                id="end"
-                type="date"
-                className="h-11"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </div>
+            <EthiopianDatePicker
+              label="Lease starts"
+              value={startDate}
+              onChange={setStartDate}
+            />
+            <EthiopianDatePicker
+              label="Lease ends"
+              value={endDate}
+              onChange={setEndDate}
+            />
           </div>
 
           <div className="grid gap-4 sm:grid-cols-3">
@@ -217,7 +208,7 @@ export function LeaseFormDialog({
                 id="dueDay"
                 type="number"
                 min="1"
-                max="28"
+                max="30"
                 className="h-11"
                 value={dueDay}
                 onChange={(e) => setDueDay(e.target.value)}

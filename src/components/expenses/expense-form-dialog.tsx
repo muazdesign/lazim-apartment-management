@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Paperclip, Sparkles } from "lucide-react";
+import { EthiopianDatePicker } from "@/components/ui/ethiopian-date-picker";
 
 export const CATEGORY_LABELS: Record<ExpenseCategory, string> = {
   maintenance: "Maintenance & repairs",
@@ -264,13 +265,11 @@ export function ExpenseFormDialog({ trigger }: { trigger: ReactElement }) {
                 onChange={(e) => setAmount(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-base">Date</Label>
-              <Input
-                className="h-11"
-                type="date"
+            <div className="col-span-1">
+              <EthiopianDatePicker
+                label="Date"
                 value={incurredOn}
-                onChange={(e) => setIncurredOn(e.target.value)}
+                onChange={setIncurredOn}
               />
             </div>
           </div>

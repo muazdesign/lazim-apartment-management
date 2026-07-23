@@ -62,9 +62,11 @@ export function MobileNav() {
         <SheetContent side="left" className="flex w-72 flex-col p-0">
           <SheetHeader className="border-b px-5 py-4 text-left">
             <SheetTitle className="font-heading text-lg">Menu</SheetTitle>
-            <p className="text-sm text-muted-foreground">
-              {profile.full_name || profile.email} · {ROLE_LABELS[profile.role]}
-            </p>
+            <Link href="/settings" onClick={() => setOpen(false)} className="inline-block">
+              <p className="text-sm text-muted-foreground hover:underline">
+                {profile.full_name || profile.email} · {ROLE_LABELS[profile.role]}
+              </p>
+            </Link>
           </SheetHeader>
 
           <nav className="flex-1 space-y-5 overflow-y-auto px-3 py-4">

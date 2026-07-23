@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { useProfile, useCan } from "@/components/profile-context";
 import type { DashboardMetrics } from "@/lib/database.types";
 import { formatMoney } from "@/lib/format";
+import { ETH_MONTHS } from "@/lib/ethiopian-calendar";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   Card,
@@ -163,11 +164,18 @@ export function DashboardClient() {
   }
 
   const monthly =
-    metrics?.monthly.map((m) => ({
-      ...m,
-      label: m.month.slice(5) + "/" + m.month.slice(2, 4),
-      profit: m.income - m.expenses,
-    })) ?? [];
+    metrics?.monthly.map((m) => {
+      const parts = m.month.split("-");
+      let label = m.month;
+      if (parts.length === 2) {
+        label = `${ETH_MONTHS[Number(parts[1])]} ${parts[0]}`;
+      }
+      return {
+        ...m,
+        label,
+        profit: m.income - m.expenses,
+      };
+    }) ?? [];
 
   const thisMonth = monthly.at(-1);
   const occupancyPct = metrics

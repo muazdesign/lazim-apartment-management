@@ -27,6 +27,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { CalendarClock } from "lucide-react";
+import { EthiopianMonthPicker } from "@/components/ui/ethiopian-month-picker";
+import {
+  toEth,
+  ethMonthToGregRange,
+  toGregISO,
+  ethMonthDays,
+  ETH_MONTHS
+} from "@/lib/ethiopian-calendar";
 
 const METHODS: { value: PaymentMethod; label: string }[] = [
   { value: "bank_transfer", label: "Bank transfer" },
@@ -51,7 +59,8 @@ export function RecordAdvanceDialog() {
   const [open, setOpen] = useState(false);
   const [leaseId, setLeaseId] = useState("");
   const [months, setMonths] = useState("3");
-  const [startMonth, setStartMonth] = useState(format(new Date(), "yyyy-MM"));
+  const currEth = toEth(new Date());
+  const [startMonth, setStartMonth] = useState({ year: currEth.year, month: currEth.month });
   const [method, setMethod] = useState<PaymentMethod>("bank_transfer");
   const [reference, setReference] = useState("");
 
@@ -79,11 +88,12 @@ export function RecordAdvanceDialog() {
   // Which months will be covered, for the plain-language preview.
   const coveredMonths = useMemo(() => {
     if (!startMonth || monthCount < 1) return [];
-    const [y, m] = startMonth.split("-").map(Number);
-    const base = new Date(y, m - 1, 1);
-    return Array.from({ length: monthCount }, (_, i) =>
-      addMonths(base, i)
-    );
+    return Array.from({ length: monthCount }, (_, i) => {
+      let m = startMonth.month + i;
+      let y = startMonth.year;
+      while (m > 13) { m -= 13; y += 1; }
+      return { year: y, month: m };
+    });
   }, [startMonth, monthCount]);
 
   const leaseItems = (leases ?? []).map((l) => ({
@@ -99,17 +109,11 @@ export function RecordAdvanceDialog() {
       const supabase = createClient();
       let covered = 0;
 
-      for (const monthDate of coveredMonths) {
-        const periodStart = format(monthDate, "yyyy-MM-01");
-        const periodEnd = format(endOfMonth(monthDate), "yyyy-MM-dd");
-        const dueDate = format(
-          new Date(
-            monthDate.getFullYear(),
-            monthDate.getMonth(),
-            selectedLease.payment_due_day
-          ),
-          "yyyy-MM-dd"
-        );
+      for (const ethDate of coveredMonths) {
+        const { from: periodStart, to: periodEnd } = ethMonthToGregRange(ethDate.year, ethDate.month);
+        const maxDays = ethMonthDays(ethDate.month, ethDate.year);
+        const safeDueDay = Math.min(selectedLease.payment_due_day, maxDays);
+        const dueDate = toGregISO(ethDate.year, ethDate.month, safeDueDay);
 
         // Reuse an existing invoice for this month, or create one.
         const { data: existing, error: findErr } = await supabase
@@ -240,13 +244,11 @@ export function RecordAdvanceDialog() {
                 onChange={(e) => setMonths(e.target.value)}
               />
             </div>
-            <div className="space-y-2">
-              <Label className="text-base">Starting from</Label>
-              <Input
-                className="h-11"
-                type="month"
+            <div className="col-span-1">
+              <EthiopianMonthPicker
+                label="Starting from"
                 value={startMonth}
-                onChange={(e) => setStartMonth(e.target.value)}
+                onChange={setStartMonth}
               />
             </div>
           </div>
@@ -282,7 +284,7 @@ export function RecordAdvanceDialog() {
             <div className="rounded-lg border bg-muted/50 p-4 text-[15px]">
               <p className="font-medium">This will mark as paid:</p>
               <p className="mt-1 text-muted-foreground">
-                {coveredMonths.map((d) => format(d, "MMM yyyy")).join(", ")}
+                {coveredMonths.map((d) => `${ETH_MONTHS[d.month]} ${d.year}`).join(", ")}
               </p>
               <p className="mt-2">
                 About{" "}
