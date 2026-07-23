@@ -50,6 +50,11 @@ BEGIN
     INTO v_current_eth_year, v_current_eth_month, v_current_eth_day
     FROM gregorian_to_ethiopian(current_date);
     
+    -- Nullify Pagume (13th month): do not generate rent invoices for this short month
+    IF v_current_eth_month = 13 THEN
+        RETURN 0;
+    END IF;
+    
     -- Determine Gregorian start/end dates of this Ethiopian month
     v_start := ethiopian_to_gregorian(v_current_eth_year, v_current_eth_month, 1);
     

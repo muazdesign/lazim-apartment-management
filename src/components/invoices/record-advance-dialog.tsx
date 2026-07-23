@@ -88,12 +88,26 @@ export function RecordAdvanceDialog() {
   // Which months will be covered, for the plain-language preview.
   const coveredMonths = useMemo(() => {
     if (!startMonth || monthCount < 1) return [];
-    return Array.from({ length: monthCount }, (_, i) => {
-      let m = startMonth.month + i;
-      let y = startMonth.year;
-      while (m > 13) { m -= 13; y += 1; }
-      return { year: y, month: m };
-    });
+    const result = [];
+    let m = startMonth.month;
+    let y = startMonth.year;
+
+    // If the user picked Pagume as the start, jump straight to Meskerem
+    if (m === 13) {
+      m = 1;
+      y += 1;
+    }
+
+    while (result.length < monthCount) {
+      result.push({ year: y, month: m });
+      m += 1;
+      if (m === 13) {
+        // Skip Pagume for rent payments (nullified)
+        m = 1;
+        y += 1;
+      }
+    }
+    return result;
   }, [startMonth, monthCount]);
 
   const leaseItems = (leases ?? []).map((l) => ({
