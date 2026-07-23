@@ -166,7 +166,8 @@ BEGIN
             eth_month,
             eth_year::text || '-' || lpad(eth_month::text, 2, '0') as eth_label
         FROM (
-            SELECT * FROM gregorian_to_ethiopian(generate_series(v_start_date, current_date, '1 day'::interval)::date)
+            SELECT (gregorian_to_ethiopian(d::date)).* 
+            FROM generate_series(v_start_date, current_date, '1 day'::interval) d
         ) g
         GROUP BY eth_year, eth_month
         ORDER BY eth_year, eth_month
