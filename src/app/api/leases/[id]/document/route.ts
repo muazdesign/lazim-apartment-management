@@ -104,12 +104,12 @@ export async function GET(
       compression: "DEFLATE",
     });
 
-    // Return the generated .docx file
+    const safeName = encodeURIComponent(tenant_name.replace(/\s+/g, "_"));
     return new NextResponse(buf as any, {
       status: 200,
       headers: {
         "Content-Type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-        "Content-Disposition": `attachment; filename="lease-${tenant_name.replace(/\s+/g, "_")}.docx"`,
+        "Content-Disposition": `attachment; filename="lease.docx"; filename*=UTF-8''lease-${safeName}.docx`,
       },
     });
   } catch (error: any) {
