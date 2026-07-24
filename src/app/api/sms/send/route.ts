@@ -29,6 +29,37 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Tenant ID and message are required' }, { status: 400 });
     }
 
+    if (tenantId === "all") {
+      const { data: tenants, error: tenantsError } = await supabase
+        .from("tenants")
+        .select("id, phone, full_name")
+        .eq("is_active", true)
+        .not("phone", "is", null)
+        .neq("phone", "");
+
+      if (tenantsError || !tenants || tenants.length === 0) {
+        return NextResponse.json({ error: "No tenants with valid phone numbers found" }, { status: 404 });
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const t of tenants) {
+        const smsResult = await sendSms({ to: t.phone, message });
+        await supabase.from("sms_logs").insert({
+          tenant_id: t.id,
+          phone_number: t.phone,
+          message,
+          status: smsResult.success ? "sent" : "failed",
+          provider_response: smsResult.providerResponse || { error: smsResult.error },
+        });
+        if (smsResult.success) successCount++;
+        else failCount++;
+      }
+
+      return NextResponse.json({ success: true, message: `Broadcast complete: Sent to ${successCount} tenants (${failCount} failed).` });
+    }
+
     // Get tenant phone number
     const { data: tenant, error: tenantError } = await supabase
       .from('tenants')

@@ -73,7 +73,11 @@ export function SendSmsDialog() {
         throw new Error(result.error || "Failed to send SMS");
       }
 
-      toast.success("SMS sent successfully!");
+      if (result.message) {
+        toast.success(result.message);
+      } else {
+        toast.success("SMS sent successfully!");
+      }
       setOpen(false);
       setMessage("");
       setSelectedTenantId("");
@@ -101,10 +105,13 @@ export function SendSmsDialog() {
           <div className="space-y-2">
             <Label htmlFor="tenant">Tenant</Label>
             <Select value={selectedTenantId} onValueChange={(val) => setSelectedTenantId(val || "")}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a tenant" />
               </SelectTrigger>
               <SelectContent>
+                <SelectItem value="all" className="font-semibold text-blue-600">
+                  📢 All Active Tenants (Broadcast)
+                </SelectItem>
                 {tenants.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.full_name} ({t.phone || "No phone"})
