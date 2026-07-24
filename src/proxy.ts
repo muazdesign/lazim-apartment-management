@@ -37,7 +37,9 @@ export async function proxy(request: NextRequest) {
     request.nextUrl.pathname.startsWith("/login") ||
     request.nextUrl.pathname.startsWith("/auth");
 
-  if (!user && !isAuthRoute) {
+  const isPublicApi = request.nextUrl.pathname.startsWith("/api/telegram");
+
+  if (!user && !isAuthRoute && !isPublicApi) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     return NextResponse.redirect(url);
