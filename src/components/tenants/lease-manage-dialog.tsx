@@ -121,7 +121,7 @@ export function LeaseManageDialog({
             save.mutate();
           }}
         >
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-base">Monthly rent</Label>
               <Input
@@ -133,13 +133,6 @@ export function LeaseManageDialog({
                 onChange={(e) => setRent(e.target.value)}
               />
             </div>
-            <div className="col-span-1">
-              <EthiopianDatePicker
-                label="Lease ends"
-                value={endDate}
-                onChange={setEndDate}
-              />
-            </div>
             <div className="space-y-2">
               <Label className="text-base">Rent due on day</Label>
               <Input
@@ -149,6 +142,13 @@ export function LeaseManageDialog({
                 max="30"
                 value={dueDay}
                 onChange={(e) => setDueDay(e.target.value)}
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <EthiopianDatePicker
+                label="Lease ends"
+                value={endDate}
+                onChange={setEndDate}
               />
             </div>
           </div>

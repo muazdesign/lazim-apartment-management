@@ -49,7 +49,7 @@ export function LeaseDocumentDialog({ lease }: LeaseDocumentDialogProps) {
     <>
       <Button variant="outline" className="flex items-center gap-2" onClick={() => setOpen(true)}>
         <FileDown className="w-4 h-4" />
-        📄 Generate Lease Agreement
+        Generate Lease Agreement
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
       <DialogContent className="max-w-md">
