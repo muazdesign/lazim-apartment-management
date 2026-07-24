@@ -12,10 +12,8 @@ interface SessionData {
 
 export type BotContext = Context & SessionFlavor<SessionData>;
 
-const botToken = process.env.TELEGRAM_BOT_TOKEN;
-if (!botToken) {
-  throw new Error("TELEGRAM_BOT_TOKEN is missing.");
-}
+// Fallback to a dummy token during Next.js build step
+const botToken = process.env.TELEGRAM_BOT_TOKEN || "dummy_token_for_build";
 
 export const bot = new Bot<BotContext>(botToken);
 
