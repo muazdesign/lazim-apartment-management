@@ -4,7 +4,7 @@ const PizZip = require('pizzip');
 const { DOMParser, XMLSerializer } = require('@xmldom/xmldom');
 
 const inputPath = 'C:\\Users\\muazm\\Documents\\Lazim Rent Docs\\Nima Almahdi Kiray Wel.docx';
-const outputDir = 'c:\\apartment-management\\public\\templates';
+const outputDir = 'c:\\apartment-management\\src\\templates';
 const outputPath = path.join(outputDir, 'lease-template.docx');
 
 if (!fs.existsSync(outputDir)) {
@@ -78,11 +78,8 @@ for (let i = 0; i < paragraphs.length; i++) {
     }
     
     // Find the third witness line which is blank and add tag
-    if (newText.includes('3ኛ------------------')) {
-       newText = newText.replace('3ኛ------------------', '3ኛ {witness3_name}');
-    }
-    if (newText.includes('3. ----------------------------------')) {
-        newText = newText.replace('3. ----------------------------------', '3. {witness3_name}');
+    if (newText.includes('3. ስም፡-')) {
+        newText = newText.replace('3. ስም፡-', '3. ስም፡- {witness3_name}');
     }
     
     // Put new text in the first w:t element of the first run, and empty the rest.
