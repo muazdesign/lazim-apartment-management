@@ -47,7 +47,7 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SendSmsR
   try {
     // Structure for actual SMS Ethiopia API integration once the API key is available
     // Replace with the actual API endpoint and payload structure
-    const response = await fetch('https://smsethiopia.com/api/sms/send', {
+    const response = await fetch('https://smsethiopia.com/api/v2/sms/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
