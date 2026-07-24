@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { currentEthDate, toGregISO, ethMonthDays } from "@/lib/ethiopian-calendar";
+import { currentEthDate, toGregISO, ethMonthDays, toEth } from "@/lib/ethiopian-calendar";
 
 export async function generateInvoicesAction() {
   const supabase = createClient();
@@ -18,84 +18,85 @@ export async function generateInvoicesAction() {
   }
 
   let createdCount = 0;
-  const currentEth = currentEthDate();
   const currentDate = new Date().toISOString().split("T")[0];
 
   for (const lease of leases) {
-    // If the lease hasn't started yet or has already ended, skip
     if (lease.start_date > currentDate || lease.end_date < currentDate) {
       continue;
     }
 
-    // Determine the billing period based on the Ethiopian calendar
-    // The period starts on `payment_due_day` of the current Ethiopian month.
-    // If today is before the payment_due_day, maybe the current cycle started last month.
-    // To keep it simple and match the old logic (which generated the *current* month's invoice):
-    
-    let cycleMonth = currentEth.month;
-    let cycleYear = currentEth.year;
-
-    // If we are currently before the due day, the active cycle actually started last month
-    if (currentEth.day < lease.payment_due_day) {
-      cycleMonth -= 1;
-      if (cycleMonth < 1) {
-        cycleMonth = 13;
-        cycleYear -= 1;
-      }
-    }
-
-    // Period Start: Gregorian date of (cycleYear, cycleMonth, payment_due_day)
-    // Handle edge cases if payment_due_day > days in the cycle month (e.g., Pagume has 5/6 days)
-    const daysInMonth = ethMonthDays(cycleMonth, cycleYear);
-    const actualStartDay = Math.min(lease.payment_due_day, daysInMonth);
-    const periodStart = toGregISO(cycleYear, cycleMonth, actualStartDay);
-
-    // Period End: Next month's due day minus 1 day
-    let nextMonth = cycleMonth + 1;
-    let nextYear = cycleYear;
-    if (nextMonth > 13) {
-      nextMonth = 1;
-      nextYear += 1;
-    }
-    
-    // To get the exact end day, we just subtract 1 day from the next cycle's start date
-    // or calculate the number of days in the current cycle. For simplicity, we just use 30 days (or length of month)
-    const daysInNextMonth = ethMonthDays(nextMonth, nextYear);
-    const nextStartDay = Math.min(lease.payment_due_day, daysInNextMonth);
-    const nextCycleStart = toGregISO(nextYear, nextMonth, nextStartDay);
-    
-    // Subtract 1 day from nextCycleStart
-    const periodEndObj = new Date(nextCycleStart);
-    periodEndObj.setDate(periodEndObj.getDate() - 1);
-    const periodEnd = periodEndObj.toISOString().split("T")[0];
-
-    const dueDate = periodStart; // Due on the first day of the cycle
-
-    // 2. Check if invoice already exists for this exact period start
-    const { data: existing } = await (await supabase)
+    // Find the most recent invoice for this lease to continue the cycle
+    const { data: latestInvoice } = await (await supabase)
       .from("invoices")
-      .select("id")
+      .select("period_start")
       .eq("lease_id", lease.id)
-      .eq("period_start", periodStart)
+      .order("period_start", { ascending: false })
+      .limit(1)
       .single();
 
-    if (!existing) {
-      // 3. Create invoice
+    // If no invoice exists, the first cycle starts on the lease start_date.
+    // Otherwise, it starts exactly 3 Ethiopian months after the latest invoice's period_start.
+    
+    let nextCycleGregorianStart = lease.start_date;
+    
+    if (latestInvoice) {
+      const latestEth = toEth(latestInvoice.period_start);
+      let nextMonth = latestEth.month + 3;
+      let nextYear = latestEth.year;
+      if (nextMonth > 13) {
+        nextMonth -= 13;
+        nextYear += 1;
+      }
+      
+      const daysInNextMonth = ethMonthDays(nextMonth, nextYear);
+      // Keep the same day of the month, bounded by the month's length
+      const actualStartDay = Math.min(latestEth.day, daysInNextMonth);
+      nextCycleGregorianStart = toGregISO(nextYear, nextMonth, actualStartDay);
+    }
+
+    // Generate invoices up to the current date (to catch up on any missed cycles)
+    while (nextCycleGregorianStart <= currentDate) {
+      const cycleStartEth = toEth(nextCycleGregorianStart);
+      
+      // Calculate period end (3 months after cycle start, minus 1 day)
+      let endMonth = cycleStartEth.month + 3;
+      let endYear = cycleStartEth.year;
+      if (endMonth > 13) {
+        endMonth -= 13;
+        endYear += 1;
+      }
+      
+      const daysInEndMonth = ethMonthDays(endMonth, endYear);
+      const endDay = Math.min(cycleStartEth.day, daysInEndMonth);
+      const nextCycleStartGregorian = toGregISO(endYear, endMonth, endDay);
+      
+      // Subtract 1 day for period end
+      const periodEndObj = new Date(nextCycleStartGregorian);
+      periodEndObj.setDate(periodEndObj.getDate() - 1);
+      const periodEnd = periodEndObj.toISOString().split("T")[0];
+
+      // Insert the 3-month invoice
       const { error: insertError } = await (await supabase)
         .from("invoices")
         .insert({
           lease_id: lease.id,
           tenant_id: lease.tenant_id,
-          period_start: periodStart,
+          period_start: nextCycleGregorianStart,
           period_end: periodEnd,
-          due_date: dueDate,
-          amount: lease.monthly_rent,
+          due_date: nextCycleGregorianStart, // Due at the start of the 3-month cycle
+          amount: lease.monthly_rent * 3, // 3 months rent!
           status: "sent"
         });
-      
+
       if (!insertError) {
         createdCount++;
+      } else {
+        console.error("Failed to insert invoice:", insertError);
+        break; // Stop generating for this lease on error
       }
+
+      // Advance to next cycle for the while loop
+      nextCycleGregorianStart = nextCycleStartGregorian;
     }
   }
 
