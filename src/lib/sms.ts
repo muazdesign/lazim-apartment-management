@@ -47,7 +47,6 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SendSmsR
   try {
     // Structure for actual SMS Ethiopia API integration once the API key is available
     // Replace with the actual API endpoint and payload structure
-    /*
     const response = await fetch('https://api.sms-ethiopia.com/v1/send', {
       method: 'POST',
       headers: {
@@ -57,6 +56,7 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SendSmsR
       body: JSON.stringify({
         to,
         message,
+        sender: 'Lazim Rent' // Adjust this when Sender ID is approved
       }),
     });
 
@@ -75,9 +75,6 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SendSmsR
       success: true,
       providerResponse: data,
     };
-    */
-    
-    throw new Error('API integration not fully implemented.');
   } catch (error: any) {
     console.error('[SMS Error]', error);
     return {
