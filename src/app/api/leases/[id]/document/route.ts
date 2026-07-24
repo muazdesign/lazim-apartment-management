@@ -114,6 +114,6 @@ export async function GET(
     });
   } catch (error: any) {
     console.error("Error generating document:", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json({ error: "Internal Server Error", details: String(error), stack: error.stack }, { status: 500 });
   }
 }
