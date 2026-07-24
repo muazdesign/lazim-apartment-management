@@ -3,7 +3,7 @@ import { bot } from "@/lib/bot";
 import { NextRequest, NextResponse } from "next/server";
 
 // We use grammy's built-in webhook callback for standard web Request/Response APIs
-export const maxDuration = 30; // Max timeout for serverless function
+export const runtime = "edge";
 export const dynamic = "force-dynamic";
 
 const handleUpdate = webhookCallback(bot, "std/http");
