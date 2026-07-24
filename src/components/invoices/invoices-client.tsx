@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, Payment, InvoiceStatus } from "@/lib/database.types";
 import { useCan } from "@/components/profile-context";
-import { formatDate, formatDateTime, formatMoney, formatEthDate } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -220,7 +220,7 @@ export function InvoicesClient() {
                           <TableCell>
                             <p className="text-[15px] font-medium">{inv.invoice_number}</p>
                             <p className="text-xs text-muted-foreground">
-                              {formatEthDate(inv.period_start)} – {formatEthDate(inv.period_end)}
+                              {formatDate(inv.period_start)} – {formatDate(inv.period_end)}
                             </p>
                           </TableCell>
                           <TableCell>
@@ -230,7 +230,7 @@ export function InvoicesClient() {
                             </p>
                           </TableCell>
                           <TableCell className={inv.status === "overdue" ? "text-[15px] font-medium text-red-600" : "text-[15px]"}>
-                            {formatEthDate(inv.due_date)}
+                            {formatDate(inv.due_date)}
                           </TableCell>
                           <TableCell>
                             <p className="text-[15px] font-medium">{formatMoney(inv.amount)}</p>
