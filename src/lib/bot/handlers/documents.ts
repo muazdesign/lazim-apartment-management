@@ -37,16 +37,34 @@ export function setupDocumentsHandler(bot: Bot<BotContext>) {
   bot.callbackQuery("documents", async (ctx) => {
     if (!ctx.session.tenantId) return ctx.answerCallbackQuery("Not authenticated.");
 
-    // Usually documents are mapped in the documents table, 
-    // or they could be static links. Here we'll just mock static links as requested.
-    const text = "📄 **Documents**\n\nSelect a document to view or download:";
+    // Fetch documents associated with this tenant
+    const { data: documents } = await supabaseAdmin
+      .from("documents")
+      .select("title, storage_path, doc_type")
+      .eq("tenant_id", ctx.session.tenantId)
+      .eq("status", "approved");
 
-    const keyboard = new InlineKeyboard()
-      .url("📄 Lease Agreement", "https://lazim-apartment-management.vercel.app/docs/lease-template.pdf").row()
-      .url("📄 House Rules", "https://lazim-apartment-management.vercel.app/docs/house-rules.pdf").row()
-      .url("📄 Emergency Contacts", "https://lazim-apartment-management.vercel.app/docs/emergency-contacts.pdf").row()
-      .url("📄 Building Policies", "https://lazim-apartment-management.vercel.app/docs/building-policies.pdf").row()
-      .text("⬅ Back", "home").text("🏠 Home", "home");
+    let text = "📄 **Documents**\n\n";
+    const keyboard = new InlineKeyboard();
+
+    if (documents && documents.length > 0) {
+      text += "Select a document to view or download:\n\n*(Links expire in 24 hours)*";
+
+      for (const doc of documents) {
+        // Generate signed URL
+        const { data: signedUrlData } = await supabaseAdmin.storage
+          .from("documents")
+          .createSignedUrl(doc.storage_path, 60 * 60 * 24); // 24 hours
+
+        if (signedUrlData?.signedUrl) {
+          keyboard.url(`📄 ${doc.title}`, signedUrlData.signedUrl).row();
+        }
+      }
+    } else {
+      text += "You currently have no documents available.";
+    }
+
+    keyboard.text("⬅ Back", "home").text("🏠 Home", "home");
 
     await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
     await ctx.answerCallbackQuery();

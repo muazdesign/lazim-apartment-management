@@ -54,21 +54,24 @@ export function setupPaymentsHandler(bot: Bot<BotContext>) {
 
   // Handle Photo Upload
   bot.on("message:photo", async (ctx, next) => {
-    if (ctx.session.state === "upload_receipt_photo") {
-      const photo = ctx.message.photo[ctx.message.photo.length - 1];
-      const fileId = photo.file_id;
-      
-      // Save file_id to session
-      ctx.session.data = { ...ctx.session.data, fileId };
-      ctx.session.state = "upload_receipt_txn";
-
-      const keyboard = new InlineKeyboard().text("❌ Cancel", "home");
-      return ctx.reply("Photo received! 📸\n\nPlease enter the **Transaction Number** from the receipt:", {
-        parse_mode: "Markdown",
-        reply_markup: keyboard,
-      });
+    // If they are explicitly in a different state (like maintenance), pass it on
+    if (ctx.session.state && ctx.session.state.startsWith("maint_")) {
+      return next();
     }
-    await next();
+    
+    // Otherwise, assume it's a receipt (either they clicked the menu or just sent a photo)
+    const photo = ctx.message.photo[ctx.message.photo.length - 1];
+    const fileId = photo.file_id;
+    
+    // Save file_id to session
+    ctx.session.data = { ...ctx.session.data, fileId };
+    ctx.session.state = "upload_receipt_txn";
+
+    const keyboard = new InlineKeyboard().text("❌ Cancel", "home");
+    return ctx.reply("Photo received! 📸\n\nPlease enter the **Transaction Number** from the receipt:", {
+      parse_mode: "Markdown",
+      reply_markup: keyboard,
+    });
   });
 
   // Handle Transaction Number Text
