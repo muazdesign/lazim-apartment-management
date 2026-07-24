@@ -68,8 +68,8 @@ export function InvoicesClient() {
       // Sort payments by date descending
       return (data || []).map(inv => ({
         ...inv,
-        payments: inv.payments.sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
-      }));
+        payments: (inv.payments || []).sort((a: Payment, b: Payment) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+      })) as unknown as InvoiceWithTenant[];
     },
   });
 
