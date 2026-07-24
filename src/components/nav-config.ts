@@ -10,6 +10,7 @@ import {
   BarChart3,
   Landmark,
   ShieldCheck,
+  MessageSquare,
 } from "lucide-react";
 
 export interface NavItem {
@@ -50,6 +51,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
     title: "System",
     items: [
       { href: "/admin", label: "Administration", icon: ShieldCheck, permission: "manageUsers" },
+      { href: "/sms", label: "SMS Logs", icon: MessageSquare, permission: "viewTenants" },
       { href: "/settings", label: "Settings", icon: ShieldCheck, permission: "viewTenants" },
     ],
   },
