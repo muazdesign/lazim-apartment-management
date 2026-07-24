@@ -66,7 +66,7 @@ export async function GET(
     const unit_number = lease.unit?.unit_number || "";
 
     // Read template
-    const templatePath = path.join(process.cwd(), "public", "templates", "lease-template.docx");
+    const templatePath = path.join(process.cwd(), "src", "templates", "lease-template.docx");
     if (!fs.existsSync(templatePath)) {
       return NextResponse.json({ error: "Template not found" }, { status: 500 });
     }
