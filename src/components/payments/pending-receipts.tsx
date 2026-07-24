@@ -96,10 +96,12 @@ export function PendingReceipts() {
                   </TableCell>
                   <TableCell>
                     <Dialog>
-                      <DialogTrigger asChild>
-                        <Button variant="outline" size="sm" className="h-8">
-                          <ExternalLink className="mr-2 h-3 w-3" /> View Receipt
-                        </Button>
+                      <DialogTrigger
+                        render={
+                          <Button variant="outline" size="sm" className="h-8" />
+                        }
+                      >
+                        <ExternalLink className="mr-2 h-3 w-3" /> View Receipt
                       </DialogTrigger>
                       <DialogContent className="sm:max-w-[500px]">
                         <DialogHeader>
