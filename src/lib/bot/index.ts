@@ -1,9 +1,12 @@
 import { Bot, Context, session, SessionFlavor } from "grammy";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+import { Language } from "./i18n";
+
 interface SessionData {
   tenantId: string | null;
   state: string | null;
+  lang: Language | null;
   data: Record<string, any>;
 }
 
@@ -20,6 +23,7 @@ function initial(): SessionData {
   return {
     tenantId: null,
     state: null,
+    lang: null,
     data: {},
   };
 }

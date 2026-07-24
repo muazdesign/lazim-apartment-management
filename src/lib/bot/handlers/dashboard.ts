@@ -2,6 +2,7 @@ import { Bot, InlineKeyboard } from "grammy";
 import type { BotContext } from "../index";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { format } from "date-fns";
+import { t } from "../i18n";
 
 export function setupDashboardHandler(bot: Bot<BotContext>) {
   const showDashboard = async (ctx: BotContext) => {
@@ -74,18 +75,18 @@ export function setupDashboardHandler(bot: Bot<BotContext>) {
       : `0 ETB ✅`;
 
     const text = 
-      `Welcome, ${tenant.full_name.split(" ")[0]}\n\n` +
-      `Apartment:\n${apartment}\n\n` +
-      `Rent:\n${rent.toLocaleString()} ETB/month\n\n` +
-      `Current Balance:\n${balanceText}\n\n` +
-      `Next Due Date:\n${nextDueDate}\n\n` +
-      `Lease Expires:\n${leaseExpires}`;
+      `${t(ctx.session.lang, "welcome_back").replace("Welcome back! Use /dashboard to access your account.", `Welcome, ${tenant.full_name.split(" ")[0]}`)}\n\n` +
+      `${t(ctx.session.lang, "apartment")}:\n${apartment}\n\n` +
+      `${t(ctx.session.lang, "rent")}:\n${rent.toLocaleString()} ETB/month\n\n` +
+      `${t(ctx.session.lang, "current_balance")}:\n${balanceText}\n\n` +
+      `${t(ctx.session.lang, "next_due_date")}:\n${nextDueDate}\n\n` +
+      `${t(ctx.session.lang, "lease_expires")}:\n${leaseExpires}`;
 
     const keyboard = new InlineKeyboard()
-      .text("🏠 My Account", "account").text("💳 Payments", "payments").row()
-      .text("📤 Upload Receipt", "upload_receipt").text("🔧 Maintenance", "maintenance").row()
-      .text("📢 Announcements", "announcements").text("📄 Documents", "documents").row()
-      .text("☎ Contact Management", "contact");
+      .text(t(ctx.session.lang, "my_account"), "account").text(t(ctx.session.lang, "payments"), "payments").row()
+      .text(t(ctx.session.lang, "upload_receipt"), "upload_receipt").text(t(ctx.session.lang, "maintenance"), "maintenance").row()
+      .text(t(ctx.session.lang, "announcements"), "announcements").text(t(ctx.session.lang, "documents"), "documents").row()
+      .text(t(ctx.session.lang, "contact_mgmt"), "contact").text(t(ctx.session.lang, "language"), "toggle_lang");
 
     // If it's a callback query, we can edit the message, else reply
     if (ctx.callbackQuery) {
@@ -98,6 +99,13 @@ export function setupDashboardHandler(bot: Bot<BotContext>) {
 
   bot.command("dashboard", showDashboard);
   bot.callbackQuery("home", showDashboard);
+
+  // --- LANGUAGE TOGGLE ---
+  bot.callbackQuery("toggle_lang", async (ctx) => {
+    ctx.session.lang = ctx.session.lang === "en" ? "am" : "en";
+    await ctx.answerCallbackQuery("Language changed / ቋንቋ ተቀይሯል");
+    await showDashboard(ctx);
+  });
 
   // My Account handler
   bot.callbackQuery("account", async (ctx) => {

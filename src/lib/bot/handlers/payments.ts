@@ -2,11 +2,12 @@ import { Bot, InlineKeyboard } from "grammy";
 import type { BotContext } from "../index";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { format } from "date-fns";
+import { t } from "../i18n";
 
 export function setupPaymentsHandler(bot: Bot<BotContext>) {
   // --- PAYMENTS DASHBOARD ---
   bot.callbackQuery("payments", async (ctx) => {
-    if (!ctx.session.tenantId) return ctx.answerCallbackQuery("Not authenticated.");
+    if (!ctx.session.tenantId) return ctx.answerCallbackQuery(t(ctx.session.lang, "not_registered"));
 
     const { data: invoices } = await supabaseAdmin
       .from("invoices")
@@ -17,93 +18,56 @@ export function setupPaymentsHandler(bot: Bot<BotContext>) {
       .limit(5);
 
     let currentBalance = 0;
-    let text = "💳 **Payments**\n\n";
+    let text = `💳 **${t(ctx.session.lang, "payments").replace("💳 ", "")}**\n\n`;
 
     if (invoices && invoices.length > 0) {
       currentBalance = invoices.reduce((sum, inv) => sum + (inv.amount - inv.amount_paid), 0);
-      text += `Current Balance: **${currentBalance.toLocaleString()} ETB** ⚠️\n\n`;
-      text += `**Outstanding Invoices:**\n`;
+      text += `${t(ctx.session.lang, "current_balance")}: **${currentBalance.toLocaleString()} ETB** ⚠️\n\n`;
+      text += `**${t(ctx.session.lang, "outstanding_invoices")}:**\n`;
       invoices.forEach((inv) => {
         text += `• ${inv.invoice_number}: ${(inv.amount - inv.amount_paid).toLocaleString()} ETB (Due: ${format(new Date(inv.due_date), "MMM d, yyyy")})\n`;
       });
     } else {
-      text += `Current Balance: **0 ETB** ✅\n\nYou have no outstanding invoices.`;
+      text += `${t(ctx.session.lang, "current_balance")}: **0 ETB** ✅\n\n${t(ctx.session.lang, "no_invoices")}`;
     }
 
     const keyboard = new InlineKeyboard()
-      .text("📤 Upload Receipt", "upload_receipt").row()
-      .text("⬅ Back", "home").text("🏠 Home", "home");
+      .text(t(ctx.session.lang, "upload_receipt"), "upload_receipt").row()
+      .text(t(ctx.session.lang, "back"), "home").text(t(ctx.session.lang, "home"), "home");
 
     await ctx.editMessageText(text, { parse_mode: "Markdown", reply_markup: keyboard });
     await ctx.answerCallbackQuery();
   });
 
-  // --- UPLOAD RECEIPT FLOW ---
+  // --- UPLOAD RECEIPT PROMPT ---
   bot.callbackQuery("upload_receipt", async (ctx) => {
-    if (!ctx.session.tenantId) return ctx.answerCallbackQuery("Not authenticated.");
+    if (!ctx.session.tenantId) return ctx.answerCallbackQuery(t(ctx.session.lang, "not_registered"));
 
     ctx.session.state = "upload_receipt_photo";
-    ctx.session.data = {}; // Reset data
+    ctx.session.data = {}; 
 
-    const text = "Please upload a clear photo of your bank receipt.";
-    const keyboard = new InlineKeyboard().text("❌ Cancel", "home");
+    const text = t(ctx.session.lang, "upload_photo_prompt");
+    const keyboard = new InlineKeyboard().text(t(ctx.session.lang, "cancel"), "home");
 
     await ctx.editMessageText(text, { reply_markup: keyboard });
     await ctx.answerCallbackQuery();
   });
 
-  // Handle Photo Upload
+  // Handle Photo Upload Directly
   bot.on("message:photo", async (ctx, next) => {
     // If they are explicitly in a different state (like maintenance), pass it on
     if (ctx.session.state && ctx.session.state.startsWith("maint_")) {
       return next();
     }
     
-    // Otherwise, assume it's a receipt (either they clicked the menu or just sent a photo)
-    const photo = ctx.message.photo[ctx.message.photo.length - 1];
-    const fileId = photo.file_id;
-    
-    // Save file_id to session
-    ctx.session.data = { ...ctx.session.data, fileId };
-    ctx.session.state = "upload_receipt_txn";
-
-    const keyboard = new InlineKeyboard().text("❌ Cancel", "home");
-    return ctx.reply("Photo received! 📸\n\nPlease enter the **Transaction Number** from the receipt:", {
-      parse_mode: "Markdown",
-      reply_markup: keyboard,
-    });
-  });
-
-  // Handle Transaction Number Text
-  bot.on("message:text", async (ctx, next) => {
-    if (ctx.session.state === "upload_receipt_txn") {
-      ctx.session.data = { ...ctx.session.data, txnNumber: ctx.message.text };
-      ctx.session.state = "upload_receipt_bank";
-
-      const text = "Great. Please choose the Bank you transferred to:";
-      const keyboard = new InlineKeyboard()
-        .text("CBE", "bank_cbe").text("Dashen", "bank_dashen").row()
-        .text("Awash", "bank_awash").text("Abyssinia", "bank_abyssinia").row()
-        .text("Telebirr", "bank_telebirr").text("Other", "bank_other").row()
-        .text("❌ Cancel", "home");
-
-      return ctx.reply(text, { reply_markup: keyboard });
-    }
-    await next();
-  });
-
-  // Handle Bank Selection
-  bot.callbackQuery(/^bank_(.+)$/, async (ctx) => {
-    if (ctx.session.state !== "upload_receipt_bank") {
-      return ctx.answerCallbackQuery("Invalid state. Please start over.");
-    }
-
-    const bank = ctx.match[1].toUpperCase();
-    const { fileId, txnNumber } = ctx.session.data;
-    
-    // Process saving the receipt here.
-    // To download the file from Telegram, we need to call getFile.
+    // Process receipt upload immediately
     try {
+      // Send a quick loading message to prevent Telegram timeout glitching
+      const loadingMsg = await ctx.reply("⏳ እባክዎ ይጠብቁ... Processing...");
+
+      const photo = ctx.message.photo[ctx.message.photo.length - 1];
+      const fileId = photo.file_id;
+      
       const file = await ctx.api.getFile(fileId);
       const filePath = file.file_path;
       if (!filePath) throw new Error("No file path returned");
@@ -112,7 +76,7 @@ export function setupPaymentsHandler(bot: Bot<BotContext>) {
       const response = await fetch(url);
       const blob = await response.blob();
       
-      const fileName = `${ctx.session.tenantId}-${Date.now()}.jpg`;
+      const fileName = `${ctx.session.tenantId}-receipt-${Date.now()}.jpg`;
       const { error: uploadError } = await supabaseAdmin.storage
         .from("receipts")
         .upload(fileName, blob, { contentType: "image/jpeg" });
@@ -122,31 +86,40 @@ export function setupPaymentsHandler(bot: Bot<BotContext>) {
       const { data: publicUrlData } = supabaseAdmin.storage.from("receipts").getPublicUrl(fileName);
       const receiptUrl = publicUrlData.publicUrl;
 
+      // Find the oldest unpaid invoice for this tenant
+      const { data: oldestInvoice } = await supabaseAdmin
+        .from("invoices")
+        .select("id")
+        .eq("tenant_id", ctx.session.tenantId)
+        .in("status", ["sent", "partially_paid", "overdue"])
+        .order("due_date", { ascending: true })
+        .limit(1)
+        .single();
+
       // Insert into payment_requests
-      const notes = `Bank: ${bank}\nTxn: ${txnNumber}`;
       await supabaseAdmin.from("payment_requests").insert({
         tenant_id: ctx.session.tenantId,
         receipt_url: receiptUrl,
         status: "pending",
-        notes,
+        invoice_id: oldestInvoice ? oldestInvoice.id : null,
       });
 
       // Clear state
       ctx.session.state = null;
       ctx.session.data = {};
 
-      const text = "Payment submitted successfully. ✅\n\nManagement has received your submission and will process it shortly.";
-      const keyboard = new InlineKeyboard().text("🏠 Home", "home");
+      const text = t(ctx.session.lang, "payment_submitted");
+      const keyboard = new InlineKeyboard().text(t(ctx.session.lang, "home"), "home");
 
-      await ctx.editMessageText(text, { reply_markup: keyboard });
-      await ctx.answerCallbackQuery();
+      // Delete loading message and send success
+      await ctx.api.deleteMessage(ctx.chat.id, loadingMsg.message_id);
+      await ctx.reply(text, { reply_markup: keyboard });
 
     } catch (error) {
       console.error("Error processing receipt:", error);
-      await ctx.editMessageText("Sorry, an error occurred while saving your receipt. Please try again.", {
-        reply_markup: new InlineKeyboard().text("🏠 Home", "home")
+      await ctx.reply(t(ctx.session.lang, "payment_error"), {
+        reply_markup: new InlineKeyboard().text(t(ctx.session.lang, "home"), "home")
       });
-      await ctx.answerCallbackQuery();
     }
   });
 }
