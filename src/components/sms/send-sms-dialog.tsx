@@ -27,6 +27,7 @@ export function SendSmsDialog() {
   const [open, setOpen] = useState(false);
   const [tenants, setTenants] = useState<any[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>("");
+  const [customPhone, setCustomPhone] = useState("");
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -58,13 +59,18 @@ export function SendSmsDialog() {
       return;
     }
 
+    if (selectedTenantId === "custom" && !customPhone.trim()) {
+      toast.error("Please enter a custom phone number.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       const response = await fetch("/api/sms/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: selectedTenantId, message }),
+        body: JSON.stringify({ tenantId: selectedTenantId, customPhone, message }),
       });
 
       const result = await response.json();
@@ -81,6 +87,7 @@ export function SendSmsDialog() {
       setOpen(false);
       setMessage("");
       setSelectedTenantId("");
+      setCustomPhone("");
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -112,6 +119,9 @@ export function SendSmsDialog() {
                 <SelectItem value="all" className="font-semibold text-blue-600">
                   📢 All Active Tenants (Broadcast)
                 </SelectItem>
+                <SelectItem value="custom" className="font-semibold text-orange-600">
+                  📱 Custom Phone Number
+                </SelectItem>
                 {tenants.map((t) => (
                   <SelectItem key={t.id} value={t.id}>
                     {t.full_name} ({t.phone || "No phone"})
@@ -120,6 +130,17 @@ export function SendSmsDialog() {
               </SelectContent>
             </Select>
           </div>
+          {selectedTenantId === "custom" && (
+            <div className="space-y-2">
+              <Label htmlFor="customPhone">Phone Number</Label>
+              <Input
+                id="customPhone"
+                placeholder="e.g. 0911234567"
+                value={customPhone}
+                onChange={(e) => setCustomPhone(e.target.value)}
+              />
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="message">Message</Label>
             <Textarea

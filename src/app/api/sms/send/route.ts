@@ -23,10 +23,32 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden. Only managers or tech admins can send SMS manually.' }, { status: 403 });
     }
 
-    const { tenantId, message } = await request.json();
+    const { tenantId, customPhone, message } = await request.json();
 
     if (!tenantId || !message) {
       return NextResponse.json({ error: 'Tenant ID and message are required' }, { status: 400 });
+    }
+
+    if (tenantId === 'custom') {
+      if (!customPhone) {
+        return NextResponse.json({ error: 'Custom phone number is required' }, { status: 400 });
+      }
+
+      const smsResult = await sendSms({ to: customPhone, message });
+      const { error: insertError } = await supabase.from('sms_logs').insert({
+        tenant_id: null,
+        phone_number: customPhone,
+        message,
+        status: smsResult.success ? 'sent' : 'failed',
+        provider_response: smsResult.providerResponse || { error: smsResult.error },
+      });
+
+      if (insertError) console.error('Error saving SMS log:', insertError);
+      
+      if (!smsResult.success) {
+        return NextResponse.json({ error: smsResult.error || 'Failed to send SMS' }, { status: 500 });
+      }
+      return NextResponse.json({ success: true, message: 'SMS sent to custom number successfully' });
     }
 
     if (tenantId === "all") {
