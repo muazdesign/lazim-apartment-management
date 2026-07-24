@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { currentEthDate, toGregISO, ethMonthDays, toEth } from "@/lib/ethiopian-calendar";
+import { currentEthDate, toGregISO, ethMonthDays, toEth, addRentMonths } from "@/lib/ethiopian-calendar";
 
 export async function generateInvoicesAction() {
   const supabase = createClient();
