@@ -205,3 +205,49 @@ export interface DashboardMetrics {
 // Loose Database generic so supabase-js accepts our table names while
 // keeping row types strong at the call sites via the interfaces above.
 export type Database = any;
+
+export interface PaymentRequest {
+  id: string;
+  tenant_id: string;
+  receipt_url: string;
+  status: "pending" | "approved" | "rejected";
+  notes: string | null;
+  created_at: string;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+}
+
+export type MaintenanceCategory = "plumbing" | "electrical" | "doors_locks" | "water" | "internet" | "cleaning" | "other";
+export type MaintenanceStatus = "pending" | "assigned" | "in_progress" | "completed";
+
+export interface MaintenanceTicket {
+  id: string;
+  tenant_id: string;
+  unit_id: string | null;
+  category: MaintenanceCategory;
+  description: string | null;
+  photo_url: string | null;
+  status: MaintenanceStatus;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  resolved_at: string | null;
+  resolved_by: string | null;
+}
+
+export interface Announcement {
+  id: string;
+  title: string;
+  content: string;
+  is_pinned: boolean;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BotSession {
+  chat_id: number;
+  tenant_id: string | null;
+  state: Record<string, any>;
+  updated_at: string;
+}
