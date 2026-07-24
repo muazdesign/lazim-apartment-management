@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
-import type { Invoice, InvoiceStatus } from "@/lib/database.types";
+import type { Invoice, Payment, InvoiceStatus } from "@/lib/database.types";
 import { useCan } from "@/components/profile-context";
-import { formatDate, formatMoney } from "@/lib/format";
+import { formatDate, formatDateTime, formatMoney, formatEthDate } from "@/lib/format";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
@@ -16,7 +16,8 @@ import { RecordAdvanceDialog } from "@/components/invoices/record-advance-dialog
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Table,
   TableBody,
@@ -25,24 +26,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Ban, RefreshCw, Wallet } from "lucide-react";
+import { Ban, RefreshCw, Wallet, Undo2, ChevronDown, ChevronUp } from "lucide-react";
+import { generateInvoicesAction } from "@/app/actions/billing";
+import { PendingReceipts } from "@/components/payments/pending-receipts";
 
 type InvoiceWithTenant = Invoice & {
   tenants: { full_name: string } | null;
   leases: { units: { unit_number: string } | null } | null;
+  payments: Payment[];
 };
-
-const FILTERS: { value: string; label: string }[] = [
-  { value: "all", label: "All" },
-  { value: "open", label: "Needs payment" },
-  { value: "overdue", label: "Overdue" },
-  { value: "paid", label: "Paid" },
-];
 
 export function InvoicesClient() {
   const canDo = useCan();
   const queryClient = useQueryClient();
   const [filter, setFilter] = useState("open");
+  const [expandedInvoice, setExpandedInvoice] = useState<string | null>(null);
+
+  // Auto-generate invoices on mount
+  useEffect(() => {
+    if (!canDo("createInvoices")) return;
+    generateInvoicesAction().then((res) => {
+      if (res.success && res.count > 0) {
+        toast.success(`Generated ${res.count} new invoices for this cycle.`);
+        queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      }
+    });
+  }, [canDo, queryClient]);
 
   const { data: invoices, isLoading } = useQuery({
     queryKey: ["invoices"],
@@ -51,31 +60,17 @@ export function InvoicesClient() {
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          "*, tenants:tenant_id(full_name), leases:lease_id(units:unit_id(unit_number))"
+          "*, tenants:tenant_id(full_name), leases:lease_id(units:unit_id(unit_number)), payments(*)"
         )
         .order("due_date", { ascending: false });
       if (error) throw error;
-      return data;
+      
+      // Sort payments by date descending
+      return (data || []).map(inv => ({
+        ...inv,
+        payments: inv.payments.sort((a, b) => new Date(b.paid_at).getTime() - new Date(a.paid_at).getTime())
+      }));
     },
-  });
-
-  const generate = useMutation({
-    mutationFn: async () => {
-      const supabase = createClient();
-      const { data, error } = await supabase.rpc("generate_monthly_invoices");
-      if (error) throw error;
-      return data as number;
-    },
-    onSuccess: (count) => {
-      queryClient.invalidateQueries({ queryKey: ["invoices"] });
-      toast.success(
-        count === 0
-          ? "All rent invoices for this month already exist — nothing new to create."
-          : `Created ${count} rent invoice${count === 1 ? "" : "s"} for this month.`
-      );
-    },
-    onError: () =>
-      toast.error("Could not generate invoices. Please try again."),
   });
 
   const voidInvoice = useMutation({
@@ -94,40 +89,57 @@ export function InvoicesClient() {
     onError: () => toast.error("Could not cancel the invoice."),
   });
 
+  const voidPayment = useMutation({
+    mutationFn: async (payment: Payment) => {
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("payments")
+        .update({ is_voided: true })
+        .eq("id", payment.id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
+      toast.success("Payment reversed. The invoice balance was updated.");
+    },
+    onError: () => toast.error("Could not reverse the payment."),
+  });
+
   const filtered = (invoices ?? []).filter((i) => {
     switch (filter) {
       case "open":
         return ["sent", "partially_paid", "overdue", "draft"].includes(i.status);
-      case "overdue":
-        return i.status === "overdue";
       case "paid":
         return i.status === "paid";
+      case "void":
+        return i.status === "void";
       default:
         return true;
     }
   });
 
+  const toggleExpand = (id: string) => {
+    setExpandedInvoice(expandedInvoice === id ? null : id);
+  };
+
   return (
     <div>
       <PageHeader
-        title="Invoices"
-        description="Monthly rent bills for every tenant. Overdue ones show in red."
+        title="Billing"
+        description="Manage tenant invoices, receipts, and payment ledger in one place."
         actions={
           <>
             <ExportButtons
               spec={{
                 title: "Invoices",
-                fileName: `invoices-${new Date().toISOString().slice(0, 10)}`,
+                fileName: `billing-${new Date().toISOString().slice(0, 10)}`,
                 rows: filtered,
                 columns: [
                   { header: "Invoice #", value: (i) => i.invoice_number },
                   { header: "Tenant", value: (i) => i.tenants?.full_name ?? "" },
-                  {
-                    header: "Unit",
-                    value: (i) => i.leases?.units?.unit_number ?? "",
-                  },
-                  { header: "Period start", value: (i) => i.period_start },
-                  { header: "Due date", value: (i) => i.due_date },
+                  { header: "Unit", value: (i) => i.leases?.units?.unit_number ?? "" },
+                  { header: "Period", value: (i) => `${i.period_start} to ${i.period_end}` },
                   { header: "Amount", value: (i) => i.amount },
                   { header: "Paid", value: (i) => i.amount_paid },
                   { header: "Status", value: (i) => i.status },
@@ -145,152 +157,182 @@ export function InvoicesClient() {
               }}
             />
             {canDo("recordPayments") && <RecordAdvanceDialog />}
-            {canDo("createInvoices") && (
-              <Button
-                className="h-11 gap-2"
-                disabled={generate.isPending}
-                onClick={() => generate.mutate()}
-              >
-                <RefreshCw
-                  className={
-                    generate.isPending ? "h-4 w-4 animate-spin" : "h-4 w-4"
-                  }
-                  aria-hidden
-                />
-                {generate.isPending
-                  ? "Creating…"
-                  : "Create this month's invoices"}
-              </Button>
-            )}
           </>
         }
       />
 
-      <Tabs value={filter} onValueChange={setFilter} className="mb-4">
+      <Tabs defaultValue="invoices" className="mb-4 space-y-4">
         <TabsList className="h-11">
-          {FILTERS.map((f) => (
-            <TabsTrigger key={f.value} value={f.value} className="h-9 px-4 text-[15px]">
-              {f.label}
-            </TabsTrigger>
-          ))}
+          <TabsTrigger value="invoices" className="h-9 px-4 text-[15px]">Invoices & Ledger</TabsTrigger>
+          <TabsTrigger value="receipts" className="h-9 px-4 text-[15px]">Pending Telegram Receipts</TabsTrigger>
         </TabsList>
-      </Tabs>
+        
+        <TabsContent value="receipts" className="m-0">
+           <PendingReceipts />
+        </TabsContent>
 
-      <Card>
-        <CardContent className="p-0">
-          {isLoading ? (
-            <div className="space-y-3 p-6">
-              {[...Array(5)].map((_, i) => (
-                <Skeleton key={i} className="h-12" />
-              ))}
-            </div>
-          ) : filtered.length === 0 ? (
-            <p className="p-10 text-center text-base text-muted-foreground">
-              {filter === "overdue"
-                ? "Great news — nothing is overdue."
-                : "No invoices here yet."}
-            </p>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-base">Invoice</TableHead>
-                  <TableHead className="text-base">Tenant</TableHead>
-                  <TableHead className="text-base">Due date</TableHead>
-                  <TableHead className="text-base">Amount</TableHead>
-                  <TableHead className="text-base">Status</TableHead>
-                  <TableHead className="w-14" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filtered.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell>
-                      <p className="text-[15px] font-medium">{inv.invoice_number}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {formatDate(inv.period_start)} –{" "}
-                        {formatDate(inv.period_end)}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-[15px]">{inv.tenants?.full_name ?? "—"}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {inv.leases?.units
-                          ? `Unit ${inv.leases.units.unit_number}`
-                          : ""}
-                      </p>
-                    </TableCell>
-                    <TableCell
-                      className={
-                        inv.status === "overdue"
-                          ? "text-[15px] font-medium text-red-600"
-                          : "text-[15px]"
-                      }
-                    >
-                      {formatDate(inv.due_date)}
-                    </TableCell>
-                    <TableCell>
-                      <p className="text-[15px] font-medium">
-                        {formatMoney(inv.amount)}
-                      </p>
-                      {inv.amount_paid > 0 && inv.status !== "paid" && (
-                        <p className="text-sm text-muted-foreground">
-                          {formatMoney(inv.amount_paid)} received
-                        </p>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <StatusBadge status={inv.status} />
-                    </TableCell>
-                    <TableCell>
-                      {canDo("manageInvoices") &&
-                        inv.status !== "void" &&
-                        inv.status !== "paid" && (
-                          <div className="flex justify-end gap-1">
-                            {canDo("recordPayments") && (
-                              <RecordPaymentDialog
-                                invoice={inv}
-                                tenantName={inv.tenants?.full_name ?? "Tenant"}
-                                trigger={
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-10 w-10 text-green-700 hover:text-green-800"
-                                    aria-label={`Record payment for ${inv.invoice_number}`}
-                                    title="Record payment"
-                                  >
-                                    <Wallet className="h-4 w-4" />
-                                  </Button>
-                                }
-                              />
+        <TabsContent value="invoices" className="m-0">
+          <div className="flex gap-2 mb-4">
+            <Button variant={filter === "open" ? "default" : "outline"} onClick={() => setFilter("open")} size="sm">Outstanding</Button>
+            <Button variant={filter === "paid" ? "default" : "outline"} onClick={() => setFilter("paid")} size="sm">Paid</Button>
+            <Button variant={filter === "all" ? "default" : "outline"} onClick={() => setFilter("all")} size="sm">All</Button>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              {isLoading ? (
+                <div className="space-y-3 p-6">
+                  {[...Array(5)].map((_, i) => (
+                    <Skeleton key={i} className="h-12" />
+                  ))}
+                </div>
+              ) : filtered.length === 0 ? (
+                <p className="p-10 text-center text-base text-muted-foreground">
+                  No invoices found.
+                </p>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-10"></TableHead>
+                      <TableHead className="text-base">Invoice</TableHead>
+                      <TableHead className="text-base">Tenant</TableHead>
+                      <TableHead className="text-base">Due date</TableHead>
+                      <TableHead className="text-base">Amount</TableHead>
+                      <TableHead className="text-base">Status</TableHead>
+                      <TableHead className="w-14" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filtered.map((inv) => (
+                      <React.Fragment key={inv.id}>
+                        <TableRow className={expandedInvoice === inv.id ? "bg-muted/30" : ""}>
+                          <TableCell>
+                            <Button 
+                              variant="ghost" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              onClick={() => toggleExpand(inv.id)}
+                            >
+                              {expandedInvoice === inv.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                            </Button>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-[15px] font-medium">{inv.invoice_number}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {formatEthDate(inv.period_start)} – {formatEthDate(inv.period_end)}
+                            </p>
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-[15px]">{inv.tenants?.full_name ?? "—"}</p>
+                            <p className="text-sm text-muted-foreground">
+                              {inv.leases?.units ? `Unit ${inv.leases.units.unit_number}` : ""}
+                            </p>
+                          </TableCell>
+                          <TableCell className={inv.status === "overdue" ? "text-[15px] font-medium text-red-600" : "text-[15px]"}>
+                            {formatEthDate(inv.due_date)}
+                          </TableCell>
+                          <TableCell>
+                            <p className="text-[15px] font-medium">{formatMoney(inv.amount)}</p>
+                            {inv.amount_paid > 0 && inv.status !== "paid" && (
+                              <p className="text-sm text-muted-foreground">{formatMoney(inv.amount_paid)} paid</p>
                             )}
-                            <ConfirmDialog
-                              title={`Cancel invoice ${inv.invoice_number}?`}
-                              description="The invoice will be marked as void and no longer count toward what the tenant owes. This is the safe way to remove a mistaken invoice — nothing is deleted."
-                              confirmLabel="Yes, cancel invoice"
-                              onConfirm={() => voidInvoice.mutateAsync(inv)}
-                              trigger={
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-10 w-10 text-red-600 hover:text-red-700"
-                                  aria-label={`Cancel invoice ${inv.invoice_number}`}
-                                  title="Cancel invoice"
-                                >
-                                  <Ban className="h-4 w-4" />
-                                </Button>
-                              }
-                            />
-                          </div>
+                          </TableCell>
+                          <TableCell><StatusBadge status={inv.status} /></TableCell>
+                          <TableCell>
+                            {canDo("manageInvoices") && inv.status !== "void" && inv.status !== "paid" && (
+                              <div className="flex justify-end gap-1">
+                                {canDo("recordPayments") && (
+                                  <RecordPaymentDialog
+                                    invoice={inv}
+                                    tenantName={inv.tenants?.full_name ?? "Tenant"}
+                                    trigger={
+                                      <Button variant="ghost" size="icon" className="h-10 w-10 text-green-700 hover:text-green-800" title="Record payment">
+                                        <Wallet className="h-4 w-4" />
+                                      </Button>
+                                    }
+                                  />
+                                )}
+                                <ConfirmDialog
+                                  title={`Cancel invoice ${inv.invoice_number}?`}
+                                  description="This is the safe way to remove a mistaken invoice."
+                                  confirmLabel="Yes, cancel invoice"
+                                  onConfirm={() => voidInvoice.mutateAsync(inv)}
+                                  trigger={
+                                    <Button variant="ghost" size="icon" className="h-10 w-10 text-red-600 hover:text-red-700" title="Cancel invoice">
+                                      <Ban className="h-4 w-4" />
+                                    </Button>
+                                  }
+                                />
+                              </div>
+                            )}
+                          </TableCell>
+                        </TableRow>
+
+                        {/* EXPANDED PAYMENTS ROW */}
+                        {expandedInvoice === inv.id && (
+                          <TableRow className="bg-muted/10 hover:bg-muted/10">
+                            <TableCell colSpan={7} className="p-0 border-b">
+                              <div className="pl-14 pr-6 py-4">
+                                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
+                                  <Wallet className="h-4 w-4" /> Payment Ledger for {inv.invoice_number}
+                                </h4>
+                                {inv.payments.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground italic">No payments recorded for this invoice yet.</p>
+                                ) : (
+                                  <div className="rounded-md border bg-background">
+                                    <Table>
+                                      <TableHeader className="bg-muted/50">
+                                        <TableRow>
+                                          <TableHead className="h-8 text-xs">Date</TableHead>
+                                          <TableHead className="h-8 text-xs">Amount</TableHead>
+                                          <TableHead className="h-8 text-xs">Method</TableHead>
+                                          <TableHead className="h-8 w-[100px]"></TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {inv.payments.map((p) => (
+                                          <TableRow key={p.id} className={p.is_voided ? "opacity-50" : ""}>
+                                            <TableCell className="py-2 text-sm">{formatDateTime(p.paid_at)}</TableCell>
+                                            <TableCell className="py-2 text-sm font-medium">
+                                              {formatMoney(p.amount)}
+                                              {p.is_voided && <Badge variant="secondary" className="ml-2 bg-red-50 text-red-700 text-[10px]">Void</Badge>}
+                                            </TableCell>
+                                            <TableCell className="py-2 text-sm capitalize">{p.method.replace('_', ' ')}</TableCell>
+                                            <TableCell className="py-2 text-right">
+                                              {!p.is_voided && canDo("recordPayments") && (
+                                                <ConfirmDialog
+                                                  title="Reverse payment?"
+                                                  description={`Reverse ${formatMoney(p.amount)}? The balance will reopen.`}
+                                                  confirmLabel="Yes, reverse"
+                                                  onConfirm={() => voidPayment.mutateAsync(p)}
+                                                  trigger={
+                                                    <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-red-600">
+                                                      <Undo2 className="h-3 w-3" />
+                                                    </Button>
+                                                  }
+                                                />
+                                              )}
+                                            </TableCell>
+                                          </TableRow>
+                                        ))}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
                         )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
+                      </React.Fragment>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

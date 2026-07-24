@@ -40,8 +40,7 @@ export const NAV_SECTIONS: { title: string; items: NavItem[] }[] = [
   {
     title: "Money",
     items: [
-      { href: "/invoices", label: "Invoices", icon: FileText, permission: "viewInvoices" },
-      { href: "/payments", label: "Payments", icon: Wallet, permission: "viewPayments" },
+      { href: "/invoices", label: "Billing", icon: FileText, permission: "viewInvoices" },
       { href: "/expenses", label: "Expenses", icon: Receipt, permission: "viewExpenses" },
       { href: "/reports", label: "Reports", icon: BarChart3, permission: "exportReports" },
       { href: "/taxes", label: "Yearly Taxes", icon: Landmark, permission: "viewTaxes" },
