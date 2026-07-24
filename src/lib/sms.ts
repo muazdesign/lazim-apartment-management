@@ -47,16 +47,15 @@ export async function sendSms({ to, message }: SendSmsOptions): Promise<SendSmsR
   try {
     // Structure for actual SMS Ethiopia API integration once the API key is available
     // Replace with the actual API endpoint and payload structure
-    const response = await fetch('https://api.sms-ethiopia.com/v1/send', {
+    const response = await fetch('https://smsethiopia.com/api/sms/send', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
+        'KEY': apiKey,
       },
       body: JSON.stringify({
-        to,
-        message,
-        sender: 'Lazim Rent' // Adjust this when Sender ID is approved
+        msisdn: to,
+        text: message
       }),
     });
 
