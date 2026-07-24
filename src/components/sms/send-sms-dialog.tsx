@@ -21,7 +21,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Send } from "lucide-react";
+import { Send, Clock } from "lucide-react";
+
+const TEMPLATES = [
+  { id: "rent_reminder", name: "የኪራይ ማሳሰቢያ (Rent Reminder)", text: "ውድ ተከራይ፡ የዚህ ወር የቤት ኪራይ ለመክፈል ጊዜው ደርሷል። እባክዎ በወቅቱ በመክፈል ቅጣት እንዳይደርስብዎ ያድርጉ።" },
+  { id: "maintenance", name: "የጥገና ማስታወቂያ (Maintenance)", text: "ውድ ተከራይ፡ በህንፃችን ላይ የጥገና ስራ ስለሚካሄድ፣ ለተፈጠረው መስተጓጎል ይቅርታ እንጠይቃለን።" },
+  { id: "payment_received", name: "ክፍያ ደርሶናል (Payment Received)", text: "ውድ ተከራይ፡ የቤት ኪራይ ክፍያዎ ደርሶናል። እናመሰግናለን።" }
+];
 
 export function SendSmsDialog() {
   const [open, setOpen] = useState(false);
@@ -29,6 +35,7 @@ export function SendSmsDialog() {
   const [selectedTenantId, setSelectedTenantId] = useState<string>("");
   const [customPhone, setCustomPhone] = useState("");
   const [message, setMessage] = useState("");
+  const [scheduledFor, setScheduledFor] = useState("");
   const [loading, setLoading] = useState(false);
 
   const supabase = createClient();
@@ -67,10 +74,15 @@ export function SendSmsDialog() {
     setLoading(true);
 
     try {
+      const payload: any = { tenantId: selectedTenantId, customPhone, message };
+      if (scheduledFor) {
+        payload.scheduledFor = new Date(scheduledFor).toISOString();
+      }
+
       const response = await fetch("/api/sms/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tenantId: selectedTenantId, customPhone, message }),
+        body: JSON.stringify(payload),
       });
 
       const result = await response.json();
@@ -88,6 +100,7 @@ export function SendSmsDialog() {
       setMessage("");
       setSelectedTenantId("");
       setCustomPhone("");
+      setScheduledFor("");
     } catch (error: any) {
       toast.error(error.message);
     } finally {
@@ -123,8 +136,8 @@ export function SendSmsDialog() {
                   📱 Custom Phone Number
                 </SelectItem>
                 {tenants.map((t) => (
-                  <SelectItem key={t.id} value={t.id}>
-                    {t.full_name} ({t.phone || "No phone"})
+                  <SelectItem key={t.id} value={t.id} disabled={!t.phone}>
+                    {t.full_name} {!t.phone ? "(No phone) - Disabled" : `(${t.phone})`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -141,6 +154,24 @@ export function SendSmsDialog() {
               />
             </div>
           )}
+
+          <div className="space-y-2">
+            <Label>Template (Amharic)</Label>
+            <Select onValueChange={(val) => {
+              const t = TEMPLATES.find(t => t.id === val);
+              if (t) setMessage(t.text);
+            }}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select a template (optional)" />
+              </SelectTrigger>
+              <SelectContent>
+                {TEMPLATES.map(t => (
+                  <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="message">Message</Label>
             <Textarea
@@ -148,11 +179,24 @@ export function SendSmsDialog() {
               placeholder="Type your message here..."
               value={message}
               onChange={(e) => setMessage(e.target.value)}
-              rows={5}
+              rows={4}
             />
           </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="schedule">Schedule For (Optional)</Label>
+            <Input
+              id="schedule"
+              type="datetime-local"
+              value={scheduledFor}
+              onChange={(e) => setScheduledFor(e.target.value)}
+              min={new Date().toISOString().slice(0, 16)}
+            />
+            <p className="text-xs text-muted-foreground">Leave blank to send immediately.</p>
+          </div>
+
           <Button type="submit" className="w-full" disabled={loading}>
-            {loading ? "Sending..." : "Send Message"}
+            {loading ? "Sending..." : scheduledFor ? <><Clock className="mr-2 h-4 w-4" /> Schedule Message</> : <><Send className="mr-2 h-4 w-4" /> Send Message</>}
           </Button>
         </form>
       </DialogContent>

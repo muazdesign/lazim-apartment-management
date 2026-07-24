@@ -110,6 +110,39 @@ export async function GET(request: Request) {
       );
     }
 
+    // Process Queued Messages
+    const now = new Date().toISOString();
+    const { data: queuedMessages, error: errorQueued } = await supabase
+      .from('sms_logs')
+      .select('id, tenant_id, phone_number, message')
+      .in('status', ['scheduled', 'pending'])
+      .lte('scheduled_for', now);
+      
+    if (errorQueued) throw errorQueued;
+
+    for (const queued of queuedMessages || []) {
+      const smsResult = await sendSms({ to: queued.phone_number, message: queued.message });
+      
+      // Update log
+      await supabase.from('sms_logs').update({
+        status: smsResult.success ? 'sent' : 'failed',
+        provider_response: smsResult.providerResponse || { error: smsResult.error },
+        sent_at: new Date().toISOString()
+      }).eq('id', queued.id);
+
+      if (smsResult.success) {
+        results.sent++;
+      } else {
+        results.failed++;
+      }
+      
+      results.logs.push({
+        type: 'queued',
+        phone: queued.phone_number,
+        success: smsResult.success,
+      });
+    }
+
     return NextResponse.json({
       success: true,
       message: 'Cron job executed successfully',

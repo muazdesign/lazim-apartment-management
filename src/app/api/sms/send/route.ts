@@ -23,7 +23,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Forbidden. Only managers or tech admins can send SMS manually.' }, { status: 403 });
     }
 
-    const { tenantId, customPhone, message } = await request.json();
+    const { tenantId, customPhone, message, scheduledFor } = await request.json();
 
     if (!tenantId || !message) {
       return NextResponse.json({ error: 'Tenant ID and message are required' }, { status: 400 });
@@ -32,6 +32,18 @@ export async function POST(request: Request) {
     if (tenantId === 'custom') {
       if (!customPhone) {
         return NextResponse.json({ error: 'Custom phone number is required' }, { status: 400 });
+      }
+
+      if (scheduledFor) {
+        const { error: insertError } = await supabase.from('sms_logs').insert({
+          tenant_id: null,
+          phone_number: customPhone,
+          message,
+          status: 'scheduled',
+          scheduled_for: scheduledFor,
+        });
+        if (insertError) console.error('Error saving SMS log:', insertError);
+        return NextResponse.json({ success: true, message: 'SMS scheduled successfully' });
       }
 
       const smsResult = await sendSms({ to: customPhone, message });
@@ -65,20 +77,35 @@ export async function POST(request: Request) {
 
       let successCount = 0;
       let failCount = 0;
+      let scheduledCount = 0;
 
       for (const t of tenants) {
-        const smsResult = await sendSms({ to: t.phone, message });
-        await supabase.from("sms_logs").insert({
-          tenant_id: t.id,
-          phone_number: t.phone,
-          message,
-          status: smsResult.success ? "sent" : "failed",
-          provider_response: smsResult.providerResponse || { error: smsResult.error },
-        });
-        if (smsResult.success) successCount++;
-        else failCount++;
+        if (scheduledFor) {
+          await supabase.from("sms_logs").insert({
+            tenant_id: t.id,
+            phone_number: t.phone,
+            message,
+            status: "scheduled",
+            scheduled_for: scheduledFor,
+          });
+          scheduledCount++;
+        } else {
+          const smsResult = await sendSms({ to: t.phone, message });
+          await supabase.from("sms_logs").insert({
+            tenant_id: t.id,
+            phone_number: t.phone,
+            message,
+            status: smsResult.success ? "sent" : "failed",
+            provider_response: smsResult.providerResponse || { error: smsResult.error },
+          });
+          if (smsResult.success) successCount++;
+          else failCount++;
+        }
       }
 
+      if (scheduledFor) {
+        return NextResponse.json({ success: true, message: `Broadcast scheduled for ${scheduledCount} tenants.` });
+      }
       return NextResponse.json({ success: true, message: `Broadcast complete: Sent to ${successCount} tenants (${failCount} failed).` });
     }
 
@@ -95,6 +122,21 @@ export async function POST(request: Request) {
 
     if (!tenant.phone) {
       return NextResponse.json({ error: 'Tenant does not have a phone number' }, { status: 400 });
+    }
+
+    if (scheduledFor) {
+      const { error: insertError } = await supabase.from('sms_logs').insert({
+        tenant_id: tenantId,
+        phone_number: tenant.phone,
+        message,
+        status: 'scheduled',
+        scheduled_for: scheduledFor,
+      });
+
+      if (insertError) {
+        console.error('Error saving SMS log:', insertError);
+      }
+      return NextResponse.json({ success: true, message: 'SMS scheduled successfully' });
     }
 
     // Send the SMS
