@@ -126,7 +126,13 @@ export function SendSmsDialog() {
             <Label htmlFor="tenant">Tenant</Label>
             <Select value={selectedTenantId} onValueChange={(val) => setSelectedTenantId(val || "")}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder="Select a tenant" />
+                <SelectValue placeholder="Select a tenant">
+                  {selectedTenantId === "all" ? "📢 All Active Tenants (Broadcast)" : 
+                   selectedTenantId === "custom" ? "📱 Custom Phone Number" :
+                   tenants.find(t => t.id === selectedTenantId) 
+                     ? `${tenants.find(t => t.id === selectedTenantId).full_name} (${tenants.find(t => t.id === selectedTenantId).phone || "No phone"})` 
+                     : "Select a tenant"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all" className="font-semibold text-blue-600">
@@ -161,7 +167,7 @@ export function SendSmsDialog() {
               const t = TEMPLATES.find(t => t.id === val);
               if (t) setMessage(t.text);
             }}>
-              <SelectTrigger>
+              <SelectTrigger className="w-full truncate">
                 <SelectValue placeholder="Select a template (optional)" />
               </SelectTrigger>
               <SelectContent>
