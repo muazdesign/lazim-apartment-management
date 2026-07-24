@@ -21,6 +21,7 @@ import { Label } from "@/components/ui/label";
 import { ConfirmDialog } from "@/components/shared/confirm-dialog";
 import { LogOut } from "lucide-react";
 import { EthiopianDatePicker } from "@/components/ui/ethiopian-date-picker";
+import { LeaseDocumentDialog } from "./lease-document-dialog";
 
 type LeaseWithUnit = Lease & { units: { unit_number: string } | null };
 
@@ -102,6 +103,10 @@ export function LeaseManageDialog({
             until {formatDate(lease.end_date)}.
           </DialogDescription>
         </DialogHeader>
+
+        <div className="flex justify-end pt-2 pb-4 border-b border-border mb-4">
+          <LeaseDocumentDialog lease={{ id: lease.id }} />
+        </div>
 
         <form
           className="space-y-4"
