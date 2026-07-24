@@ -4,11 +4,7 @@ import { createClient } from '@supabase/supabase-js';
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
-// Initialize a Supabase client with the service role key to bypass RLS for the webhook
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Supabase client will be initialized dynamically inside the POST handler
 
 async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
   await fetch(`${TELEGRAM_API}/sendMessage`, {
@@ -32,6 +28,16 @@ function normalizePhone(phone: string) {
 
 export async function POST(req: Request) {
   try {
+    const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_KEY) {
+      console.error('Missing Supabase credentials');
+      return NextResponse.json({ error: 'Missing Supabase credentials' }, { status: 500 });
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
+
     const update = await req.json();
 
     if (!update.message) return NextResponse.json({ ok: true });
