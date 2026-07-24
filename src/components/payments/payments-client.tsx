@@ -36,6 +36,9 @@ const METHOD_LABELS: Record<string, string> = {
   other: "Other",
 };
 
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PendingReceipts } from "./pending-receipts";
+
 export function PaymentsClient() {
   const queryClient = useQueryClient();
 
@@ -82,7 +85,7 @@ export function PaymentsClient() {
     <div>
       <PageHeader
         title="Payments"
-        description="Every payment ever received, newest first. Nothing here is ever deleted."
+        description="Manage payment history and approve receipts uploaded by tenants via Telegram."
         actions={
           <ExportButtons
             spec={{
@@ -109,7 +112,18 @@ export function PaymentsClient() {
         }
       />
 
-      <Card>
+      <Tabs defaultValue="history" className="space-y-4">
+        <TabsList>
+          <TabsTrigger value="history">Payment Ledger</TabsTrigger>
+          <TabsTrigger value="receipts">Pending Telegram Receipts</TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="receipts" className="m-0">
+          <PendingReceipts />
+        </TabsContent>
+
+        <TabsContent value="history" className="m-0">
+          <Card>
         <CardContent className="p-0">
           {isLoading ? (
             <div className="space-y-3 p-6">
@@ -196,6 +210,8 @@ export function PaymentsClient() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
