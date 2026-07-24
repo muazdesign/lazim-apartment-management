@@ -83,11 +83,11 @@ export function RecordAdvanceDialog() {
   });
 
   const selectedLease = leases?.find((l) => l.id === leaseId);
-  const monthCount = Math.max(0, Math.min(24, Number(months) || 0));
+  const cycleCount = Math.max(0, Math.min(8, Number(months) || 0)); // max 8 cycles (2 years)
 
-  // Which months will be covered, for the plain-language preview.
+  // Which cycles will be covered, for the plain-language preview.
   const coveredMonths = useMemo(() => {
-    if (!startMonth || monthCount < 1) return [];
+    if (!startMonth || cycleCount < 1) return [];
     const result = [];
     let m = startMonth.month;
     let y = startMonth.year;
@@ -98,17 +98,16 @@ export function RecordAdvanceDialog() {
       y += 1;
     }
 
-    while (result.length < monthCount) {
+    while (result.length < cycleCount) {
       result.push({ year: y, month: m });
-      m += 1;
-      if (m === 13) {
-        // Skip Pagume for rent payments (nullified)
-        m = 1;
+      m += 3;
+      if (m > 13) {
+        m -= 13;
         y += 1;
       }
     }
     return result;
-  }, [startMonth, monthCount]);
+  }, [startMonth, cycleCount]);
 
   const leaseItems = (leases ?? []).map((l) => ({
     value: l.id,
@@ -124,12 +123,30 @@ export function RecordAdvanceDialog() {
       let covered = 0;
 
       for (const ethDate of coveredMonths) {
-        const { from: periodStart, to: periodEnd } = ethMonthToGregRange(ethDate.year, ethDate.month);
-        const maxDays = ethMonthDays(ethDate.month, ethDate.year);
-        const safeDueDay = Math.min(selectedLease.payment_due_day, maxDays);
-        const dueDate = toGregISO(ethDate.year, ethDate.month, safeDueDay);
+        // cycle start
+        const maxDaysStart = ethMonthDays(ethDate.month, ethDate.year);
+        const safeStartDay = Math.min(selectedLease.payment_due_day, maxDaysStart);
+        const periodStart = toGregISO(ethDate.year, ethDate.month, safeStartDay);
 
-        // Reuse an existing invoice for this month, or create one.
+        // cycle end (3 months later)
+        let endM = ethDate.month + 3;
+        let endY = ethDate.year;
+        if (endM > 13) {
+          endM -= 13;
+          endY += 1;
+        }
+        const maxDaysEnd = ethMonthDays(endM, endY);
+        const safeEndDay = Math.min(selectedLease.payment_due_day, maxDaysEnd);
+        const periodEndGreg = toGregISO(endY, endM, safeEndDay);
+        
+        // subtract 1 day for period end
+        const periodEndObj = new Date(periodEndGreg);
+        periodEndObj.setDate(periodEndObj.getDate() - 1);
+        const periodEnd = periodEndObj.toISOString().split("T")[0];
+
+        const dueDate = periodStart;
+
+        // Reuse an existing invoice for this period start, or create one.
         const { data: existing, error: findErr } = await supabase
           .from("invoices")
           .select("*")
@@ -148,7 +165,7 @@ export function RecordAdvanceDialog() {
               period_start: periodStart,
               period_end: periodEnd,
               due_date: dueDate,
-              amount: selectedLease.monthly_rent,
+              amount: selectedLease.monthly_rent * 3, // 3 months rent
               status: "sent",
             })
             .select("*")
@@ -165,7 +182,7 @@ export function RecordAdvanceDialog() {
             tenant_id: selectedLease.tenant_id,
             amount: remaining,
             method,
-            reference: reference.trim() || `Advance payment (${monthCount} months)`,
+            reference: reference.trim() || `Advance payment (${cycleCount} cycles)`,
           });
           if (payErr) throw payErr;
           covered += 1;
@@ -179,9 +196,9 @@ export function RecordAdvanceDialog() {
       queryClient.invalidateQueries({ queryKey: ["dashboard-metrics"] });
       toast.success(
         covered === 0
-          ? "Those months were already fully paid — nothing to change."
-          : `Recorded advance payment. ${monthCount} month${
-              monthCount === 1 ? "" : "s"
+          ? "Those cycles were already fully paid — nothing to change."
+          : `Recorded advance payment. ${cycleCount} cycle${
+              cycleCount === 1 ? "" : "s"
             } are now marked paid.`
       );
       setOpen(false);
@@ -192,7 +209,7 @@ export function RecordAdvanceDialog() {
       toast.error("Could not record the advance payment. Please try again."),
   });
 
-  const estimatedTotal = (selectedLease?.monthly_rent ?? 0) * monthCount;
+  const estimatedTotal = (selectedLease?.monthly_rent ?? 0) * 3 * cycleCount;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -208,9 +225,9 @@ export function RecordAdvanceDialog() {
         <DialogHeader>
           <DialogTitle className="text-xl">Record an advance payment</DialogTitle>
           <DialogDescription className="text-base">
-            For a tenant who paid several months up front. This creates each
-            month&apos;s invoice and marks it paid in one step. It&apos;s safe to
-            run again — already-paid months won&apos;t be charged twice.
+            For a tenant who paid several 3-month cycles up front. This creates each
+            cycle&apos;s invoice and marks it paid in one step. It&apos;s safe to
+            run again — already-paid cycles won&apos;t be charged twice.
           </DialogDescription>
         </DialogHeader>
 
@@ -220,8 +237,8 @@ export function RecordAdvanceDialog() {
             e.preventDefault();
             if (!selectedLease)
               return toast.error("Please choose a tenant first.");
-            if (monthCount < 1)
-              return toast.error("Please enter how many months were paid.");
+            if (cycleCount < 1)
+              return toast.error("Please enter how many cycles were paid.");
             mutation.mutate();
           }}
         >
@@ -248,12 +265,12 @@ export function RecordAdvanceDialog() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label className="text-base">How many months paid?</Label>
+              <Label className="text-base">How many 3-month cycles paid?</Label>
               <Input
                 className="h-11"
                 type="number"
                 min="1"
-                max="24"
+                max="8"
                 value={months}
                 onChange={(e) => setMonths(e.target.value)}
               />
@@ -305,7 +322,7 @@ export function RecordAdvanceDialog() {
                 <span className="font-semibold">
                   {formatMoney(estimatedTotal)}
                 </span>{" "}
-                total ({formatMoney(selectedLease.monthly_rent)} × {monthCount}).
+                total ({formatMoney(selectedLease.monthly_rent * 3)} × {cycleCount}).
               </p>
             </div>
           )}
