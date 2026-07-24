@@ -41,12 +41,9 @@ export async function generateInvoicesAction() {
     
     if (latestInvoice) {
       const latestEth = toEth(latestInvoice.period_start);
-      let nextMonth = latestEth.month + 3;
-      let nextYear = latestEth.year;
-      if (nextMonth > 13) {
-        nextMonth -= 13;
-        nextYear += 1;
-      }
+      const nextCycle = addRentMonths(latestEth.month, latestEth.year, 3);
+      let nextMonth = nextCycle.month;
+      let nextYear = nextCycle.year;
       
       const daysInNextMonth = ethMonthDays(nextMonth, nextYear);
       // Keep the same day of the month, bounded by the month's length
@@ -59,12 +56,9 @@ export async function generateInvoicesAction() {
       const cycleStartEth = toEth(nextCycleGregorianStart);
       
       // Calculate period end (3 months after cycle start, minus 1 day)
-      let endMonth = cycleStartEth.month + 3;
-      let endYear = cycleStartEth.year;
-      if (endMonth > 13) {
-        endMonth -= 13;
-        endYear += 1;
-      }
+      const endCycle = addRentMonths(cycleStartEth.month, cycleStartEth.year, 3);
+      let endMonth = endCycle.month;
+      let endYear = endCycle.year;
       
       const daysInEndMonth = ethMonthDays(endMonth, endYear);
       const endDay = Math.min(cycleStartEth.day, daysInEndMonth);

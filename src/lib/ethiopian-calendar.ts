@@ -1,11 +1,3 @@
-/**
- * Ethiopian (Amharic) calendar utilities.
- *
- * The database stores dates in Gregorian format. This module converts
- * at the UI boundary so users see and enter Ethiopian dates while
- * PostgreSQL date arithmetic keeps working under the hood.
- */
-
 import { toEthiopian, toGregorian } from "ethiopian-calendar-new";
 import { parseISO } from "date-fns";
 
@@ -91,6 +83,30 @@ export function currentEthYear(): number {
 /** Returns the current Ethiopian date. */
 export function currentEthDate(): EthDate {
   return toEth(new Date());
+}
+
+/**
+ * Adds a number of "rent" months to a given Ethiopian month/year.
+ * In Ethiopian rent accounting, Pagume (Month 13) is skipped because it's only 5-6 days.
+ * Rent is paid for 12 months.
+ */
+export function addRentMonths(month: number, year: number, count: number): { month: number; year: number } {
+  let newM = month;
+  let newY = year;
+  
+  for (let i = 0; i < count; i++) {
+    newM++;
+    if (newM === 13) {
+      newM = 1; // Skip Pagume
+      newY++;
+    } else if (newM > 13) {
+      // In case they passed month=13 to start with
+      newM = 1;
+      newY++;
+    }
+  }
+  
+  return { month: newM, year: newY };
 }
 
 /* ------------------------------------------------------------------ */
