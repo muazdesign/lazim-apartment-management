@@ -6,7 +6,7 @@ import { addMonths, endOfMonth, format } from "date-fns";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, PaymentMethod } from "@/lib/database.types";
-import { formatMoney, formatEthDate } from "@/lib/format";
+import { formatMoney, formatDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -317,7 +317,7 @@ export function RecordAdvanceDialog() {
           {selectedLease && cycleRanges.length > 0 && (
             <div className="rounded-lg border bg-muted/50 p-4 text-[15px]">
               <p className="font-medium text-foreground">
-                This covers {months} months: {formatEthDate(cycleRanges[0].periodStart)} – {formatEthDate(cycleRanges[cycleRanges.length - 1].periodEnd)}. Total: {formatMoney(estimatedTotal)}
+                This covers {months} months: {formatDate(cycleRanges[0].periodStart)} – {formatDate(cycleRanges[cycleRanges.length - 1].periodEnd)}. Total: {formatMoney(estimatedTotal)}
               </p>
             </div>
           )}
