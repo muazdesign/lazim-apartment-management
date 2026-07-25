@@ -194,43 +194,30 @@ export function InvoicesClient() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-10"></TableHead>
-                      <TableHead className="text-base">Invoice</TableHead>
-                      <TableHead className="text-base">Tenant</TableHead>
-                      <TableHead className="text-base">Due date</TableHead>
+                      <TableHead className="text-base">Tenant & Unit</TableHead>
+                      <TableHead className="text-base">Coverage Period</TableHead>
                       <TableHead className="text-base">Amount</TableHead>
                       <TableHead className="text-base">Status</TableHead>
-                      <TableHead className="w-14" />
+                      <TableHead className="text-right text-base pr-4">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filtered.map((inv) => (
                       <React.Fragment key={inv.id}>
-                        <TableRow className={expandedInvoice === inv.id ? "bg-muted/30" : ""}>
-                          <TableCell>
-                            <Button 
-                              variant="ghost" 
-                              size="sm" 
-                              className="h-8 w-8 p-0"
-                              onClick={() => toggleExpand(inv.id)}
-                            >
-                              {expandedInvoice === inv.id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                            </Button>
-                          </TableCell>
-                          <TableCell>
-                            <p className="text-[15px] font-medium">{inv.invoice_number}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatDate(inv.period_start)} – {formatDate(inv.period_end)}
-                            </p>
-                          </TableCell>
+                        <TableRow 
+                          className={`cursor-pointer hover:bg-muted/50 transition-colors ${expandedInvoice === inv.id ? "bg-muted/30" : ""}`}
+                          onClick={() => toggleExpand(inv.id)}
+                        >
                           <TableCell>
                             <p className="text-[15px]">{inv.tenants?.full_name ?? "—"}</p>
                             <p className="text-sm text-muted-foreground">
                               {inv.leases?.units ? `Unit ${inv.leases.units.unit_number}` : ""}
                             </p>
                           </TableCell>
-                          <TableCell className={inv.status === "overdue" ? "text-[15px] font-medium text-red-600" : "text-[15px]"}>
-                            {formatDate(inv.due_date)}
+                          <TableCell>
+                            <p className="text-[15px] font-medium">
+                              {formatDate(inv.period_start)} – {formatDate(inv.period_end)}
+                            </p>
                           </TableCell>
                           <TableCell>
                             <p className="text-[15px] font-medium">{formatMoney(inv.amount)}</p>
@@ -239,7 +226,7 @@ export function InvoicesClient() {
                             )}
                           </TableCell>
                           <TableCell><StatusBadge status={inv.status} /></TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             {canDo("manageInvoices") && inv.status !== "void" && inv.status !== "paid" && (
                               <div className="flex justify-end gap-1">
                                 {canDo("recordPayments") && (
@@ -247,19 +234,19 @@ export function InvoicesClient() {
                                     invoice={inv}
                                     tenantName={inv.tenants?.full_name ?? "Tenant"}
                                     trigger={
-                                      <Button variant="ghost" size="icon" className="h-10 w-10 text-green-700 hover:text-green-800" title="Record payment">
+                                      <Button variant="ghost" size="icon" className="h-10 w-10 text-green-700 hover:text-green-800 hover:bg-green-100/50" title="Record payment">
                                         <Wallet className="h-4 w-4" />
                                       </Button>
                                     }
                                   />
                                 )}
                                 <ConfirmDialog
-                                  title={`Cancel invoice ${inv.invoice_number}?`}
-                                  description="This is the safe way to remove a mistaken invoice."
-                                  confirmLabel="Yes, cancel invoice"
+                                  title={`Cancel pending payment for ${inv.tenants?.full_name ?? "Tenant"}?`}
+                                  description="This will safely cancel this payment request."
+                                  confirmLabel="Yes, cancel it"
                                   onConfirm={() => voidInvoice.mutateAsync(inv)}
                                   trigger={
-                                    <Button variant="ghost" size="icon" className="h-10 w-10 text-red-600 hover:text-red-700" title="Cancel invoice">
+                                    <Button variant="ghost" size="icon" className="h-10 w-10 text-red-600 hover:text-red-700 hover:bg-red-100/50" title="Cancel payment request">
                                       <Ban className="h-4 w-4" />
                                     </Button>
                                   }

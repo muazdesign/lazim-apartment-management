@@ -6,7 +6,7 @@ import { addMonths, endOfMonth, format } from "date-fns";
 import { toast } from "sonner";
 import { createClient } from "@/lib/supabase/client";
 import type { Invoice, PaymentMethod } from "@/lib/database.types";
-import { formatMoney } from "@/lib/format";
+import { formatMoney, formatEthDate } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -83,11 +83,11 @@ export function RecordAdvanceDialog() {
   });
 
   const selectedLease = leases?.find((l) => l.id === leaseId);
-  const cycleCount = Math.max(0, Math.min(8, Number(months) || 0)); // max 8 cycles (2 years)
+  const cycleCount = Math.max(0, Math.min(8, (Number(months) || 0) / 3)); // max 8 cycles (2 years)
 
   // Which cycles will be covered, for the plain-language preview.
-  const coveredMonths = useMemo(() => {
-    if (!startMonth || cycleCount < 1) return [];
+  const cycleRanges = useMemo(() => {
+    if (!startMonth || cycleCount < 1 || !selectedLease) return [];
     const result = [];
     let m = startMonth.month;
     let y = startMonth.year;
@@ -99,7 +99,26 @@ export function RecordAdvanceDialog() {
     }
 
     while (result.length < cycleCount) {
-      result.push({ year: y, month: m });
+      const maxDaysStart = ethMonthDays(m, y);
+      const safeStartDay = Math.min(selectedLease.payment_due_day, maxDaysStart);
+      const periodStart = toGregISO(y, m, safeStartDay);
+
+      let endM = m + 3;
+      let endY = y;
+      if (endM > 12) {
+        endM -= 12;
+        endY += 1;
+      }
+      const maxDaysEnd = ethMonthDays(endM, endY);
+      const safeEndDay = Math.min(selectedLease.payment_due_day, maxDaysEnd);
+      const periodEndGreg = toGregISO(endY, endM, safeEndDay);
+      
+      const periodEndObj = new Date(periodEndGreg);
+      periodEndObj.setDate(periodEndObj.getDate() - 1);
+      const periodEnd = periodEndObj.toISOString().split("T")[0];
+
+      result.push({ periodStart, periodEnd });
+      
       m += 3;
       if (m > 12) {
         m -= 12;
@@ -107,7 +126,7 @@ export function RecordAdvanceDialog() {
       }
     }
     return result;
-  }, [startMonth, cycleCount]);
+  }, [startMonth, cycleCount, selectedLease]);
 
   const leaseItems = (leases ?? []).map((l) => ({
     value: l.id,
@@ -122,28 +141,8 @@ export function RecordAdvanceDialog() {
       const supabase = createClient();
       let covered = 0;
 
-      for (const ethDate of coveredMonths) {
-        // cycle start
-        const maxDaysStart = ethMonthDays(ethDate.month, ethDate.year);
-        const safeStartDay = Math.min(selectedLease.payment_due_day, maxDaysStart);
-        const periodStart = toGregISO(ethDate.year, ethDate.month, safeStartDay);
-
-        // cycle end (3 months later)
-        let endM = ethDate.month + 3;
-        let endY = ethDate.year;
-        if (endM > 12) {
-          endM -= 12;
-          endY += 1;
-        }
-        const maxDaysEnd = ethMonthDays(endM, endY);
-        const safeEndDay = Math.min(selectedLease.payment_due_day, maxDaysEnd);
-        const periodEndGreg = toGregISO(endY, endM, safeEndDay);
-        
-        // subtract 1 day for period end
-        const periodEndObj = new Date(periodEndGreg);
-        periodEndObj.setDate(periodEndObj.getDate() - 1);
-        const periodEnd = periodEndObj.toISOString().split("T")[0];
-
+      for (const cycle of cycleRanges) {
+        const { periodStart, periodEnd } = cycle;
         const dueDate = periodStart;
 
         // Reuse an existing invoice for this period start, or create one.
@@ -265,15 +264,19 @@ export function RecordAdvanceDialog() {
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label className="text-base">How many 3-month cycles paid?</Label>
-              <Input
-                className="h-11"
-                type="number"
-                min="1"
-                max="8"
-                value={months}
-                onChange={(e) => setMonths(e.target.value)}
-              />
+              <Label className="text-base">Number of months to pay</Label>
+              <Select value={months} onValueChange={setMonths}>
+                <SelectTrigger className="h-11">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[3, 6, 9, 12, 15, 18, 21, 24].map((m) => (
+                    <SelectItem key={m} value={m.toString()}>
+                      {m} months
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="col-span-1">
               <EthiopianMonthPicker
@@ -311,18 +314,10 @@ export function RecordAdvanceDialog() {
             </div>
           </div>
 
-          {selectedLease && coveredMonths.length > 0 && (
+          {selectedLease && cycleRanges.length > 0 && (
             <div className="rounded-lg border bg-muted/50 p-4 text-[15px]">
-              <p className="font-medium">This will mark as paid:</p>
-              <p className="mt-1 text-muted-foreground">
-                {coveredMonths.map((d) => `${ETH_MONTHS[d.month]} ${d.year}`).join(", ")}
-              </p>
-              <p className="mt-2">
-                About{" "}
-                <span className="font-semibold">
-                  {formatMoney(estimatedTotal)}
-                </span>{" "}
-                total ({formatMoney(selectedLease.monthly_rent * 3)} × {cycleCount}).
+              <p className="font-medium text-foreground">
+                This covers {months} months: {formatEthDate(cycleRanges[0].periodStart)} – {formatEthDate(cycleRanges[cycleRanges.length - 1].periodEnd)}. Total: {formatMoney(estimatedTotal)}
               </p>
             </div>
           )}

@@ -30,6 +30,7 @@ export async function generateInvoicesAction() {
       .from("invoices")
       .select("period_start")
       .eq("lease_id", lease.id)
+      .neq("status", "void")
       .order("period_start", { ascending: false })
       .limit(1)
       .single();
