@@ -33,7 +33,6 @@ import {
   ethMonthToGregRange,
   toGregISO,
   ethMonthDays,
-  addRentMonths,
   ETH_MONTHS
 } from "@/lib/ethiopian-calendar";
 
@@ -101,9 +100,11 @@ export function RecordAdvanceDialog() {
 
     while (result.length < cycleCount) {
       result.push({ year: y, month: m });
-      const next = addRentMonths(m, y, 3);
-      m = next.month;
-      y = next.year;
+      m += 3;
+      if (m > 12) {
+        m -= 12;
+        y += 1;
+      }
     }
     return result;
   }, [startMonth, cycleCount]);
@@ -128,9 +129,12 @@ export function RecordAdvanceDialog() {
         const periodStart = toGregISO(ethDate.year, ethDate.month, safeStartDay);
 
         // cycle end (3 months later)
-        const nextCycle = addRentMonths(ethDate.month, ethDate.year, 3);
-        let endM = nextCycle.month;
-        let endY = nextCycle.year;
+        let endM = ethDate.month + 3;
+        let endY = ethDate.year;
+        if (endM > 12) {
+          endM -= 12;
+          endY += 1;
+        }
         const maxDaysEnd = ethMonthDays(endM, endY);
         const safeEndDay = Math.min(selectedLease.payment_due_day, maxDaysEnd);
         const periodEndGreg = toGregISO(endY, endM, safeEndDay);

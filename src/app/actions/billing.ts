@@ -1,7 +1,7 @@
 "use server";
 
 import { createClient } from "@/lib/supabase/server";
-import { currentEthDate, toGregISO, ethMonthDays, toEth, addRentMonths } from "@/lib/ethiopian-calendar";
+import { currentEthDate, toGregISO, ethMonthDays, toEth } from "@/lib/ethiopian-calendar";
 
 export async function generateInvoicesAction() {
   const supabase = createClient();
@@ -41,9 +41,12 @@ export async function generateInvoicesAction() {
     
     if (latestInvoice) {
       const latestEth = toEth(latestInvoice.period_start);
-      const nextCycle = addRentMonths(latestEth.month, latestEth.year, 3);
-      let nextMonth = nextCycle.month;
-      let nextYear = nextCycle.year;
+      let nextMonth = latestEth.month + 3;
+      let nextYear = latestEth.year;
+      if (nextMonth > 12) {
+        nextMonth -= 12;
+        nextYear += 1;
+      }
       
       const daysInNextMonth = ethMonthDays(nextMonth, nextYear);
       // Keep the same day of the month, bounded by the month's length
@@ -56,9 +59,12 @@ export async function generateInvoicesAction() {
       const cycleStartEth = toEth(nextCycleGregorianStart);
       
       // Calculate period end (3 months after cycle start, minus 1 day)
-      const endCycle = addRentMonths(cycleStartEth.month, cycleStartEth.year, 3);
-      let endMonth = endCycle.month;
-      let endYear = endCycle.year;
+      let endMonth = cycleStartEth.month + 3;
+      let endYear = cycleStartEth.year;
+      if (endMonth > 12) {
+        endMonth -= 12;
+        endYear += 1;
+      }
       
       const daysInEndMonth = ethMonthDays(endMonth, endYear);
       const endDay = Math.min(cycleStartEth.day, daysInEndMonth);
