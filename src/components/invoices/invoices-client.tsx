@@ -262,7 +262,7 @@ export function InvoicesClient() {
                             <TableCell colSpan={7} className="p-0 border-b">
                               <div className="pl-14 pr-6 py-4">
                                 <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                  <Wallet className="h-4 w-4" /> Payment Ledger for {inv.invoice_number}
+                                  <Wallet className="h-4 w-4" /> Payment Ledger
                                 </h4>
                                 {inv.payments.length === 0 ? (
                                   <p className="text-sm text-muted-foreground italic">No payments recorded for this invoice yet.</p>
