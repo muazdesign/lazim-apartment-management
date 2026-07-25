@@ -265,7 +265,7 @@ export function RecordAdvanceDialog() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label className="text-base">Number of months to pay</Label>
-              <Select value={months} onValueChange={setMonths}>
+              <Select value={months} onValueChange={(v) => setMonths(v ?? "3")}>
                 <SelectTrigger className="h-11">
                   <SelectValue />
                 </SelectTrigger>
