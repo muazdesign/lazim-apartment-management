@@ -26,15 +26,71 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Ban, RefreshCw, Wallet, Undo2, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronDown, ChevronUp, Wallet, Undo2, Ban, RefreshCw } from "lucide-react";
+import { toEth, ethMonthDays, toGregISO } from "@/lib/ethiopian-calendar";
 import { generateInvoicesAction } from "@/app/actions/billing";
 import { PendingReceipts } from "@/components/payments/pending-receipts";
 
 type InvoiceWithTenant = Invoice & {
   tenants: { full_name: string } | null;
-  leases: { units: { unit_number: string } | null } | null;
+  leases: { monthly_rent: number; units: { unit_number: string } | null } | null;
   payments: Payment[];
 };
+
+function renderCoverageBreakdown(inv: InvoiceWithTenant) {
+  if (!inv.leases?.monthly_rent) return null;
+  const rent = inv.leases.monthly_rent;
+  const numMonths = Math.round(inv.amount / rent);
+  if (numMonths <= 1) return null; // No need to break down 1 month
+
+  const chunks: { start: string; end: string }[] = [];
+  let currGregStart = inv.period_start;
+  const startEth = toEth(currGregStart);
+  let m = startEth.month;
+  let y = startEth.year;
+  const paymentDueDay = Math.min(startEth.day, ethMonthDays(m, y)); // typically 15
+
+  for (let i = 0; i < numMonths; i++) {
+    let nextM = m + 1;
+    let nextY = y;
+    if (nextM > 12) {
+      nextM -= 12;
+      nextY += 1;
+    }
+
+    const maxDaysNext = ethMonthDays(nextM, nextY);
+    const safeEndDay = Math.min(paymentDueDay, maxDaysNext);
+    const nextCycleStart = toGregISO(nextY, nextM, safeEndDay);
+
+    const nextStartObj = new Date(nextCycleStart);
+    nextStartObj.setDate(nextStartObj.getDate() - 1);
+    const blockEnd = nextStartObj.toISOString().split("T")[0];
+
+    chunks.push({ start: currGregStart, end: blockEnd });
+
+    currGregStart = nextCycleStart;
+    m = nextM;
+    y = nextY;
+  }
+
+  return (
+    <div className="mb-6 rounded-md border bg-background/50 p-3">
+      <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Coverage Breakdown</h5>
+      <ul className="space-y-1">
+        {chunks.map((chunk, i) => (
+          <li key={i} className="text-sm flex justify-between">
+            <span>
+              {formatDate(chunk.start)} – {formatDate(chunk.end)}
+            </span>
+            <span className="font-medium text-muted-foreground">
+              {formatMoney(rent)}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export function InvoicesClient() {
   const canDo = useCan();
@@ -60,7 +116,7 @@ export function InvoicesClient() {
       const { data, error } = await supabase
         .from("invoices")
         .select(
-          "*, tenants:tenant_id(full_name), leases:lease_id(units:unit_id(unit_number)), payments(*)"
+          "*, tenants:tenant_id(full_name), leases:lease_id(monthly_rent, units:unit_id(unit_number)), payments(*)"
         )
         .order("due_date", { ascending: false });
       if (error) throw error;
@@ -261,11 +317,12 @@ export function InvoicesClient() {
                           <TableRow className="bg-muted/10 hover:bg-muted/10">
                             <TableCell colSpan={7} className="p-0 border-b">
                               <div className="pl-14 pr-6 py-4">
-                                <h4 className="text-sm font-semibold mb-2 flex items-center gap-2">
-                                  <Wallet className="h-4 w-4" /> Payment Ledger
+                                <h4 className="text-sm font-semibold mb-4 flex items-center gap-2">
+                                  <Wallet className="h-4 w-4" /> Payment History
                                 </h4>
+                                {renderCoverageBreakdown(inv as unknown as InvoiceWithTenant)}
                                 {inv.payments.length === 0 ? (
-                                  <p className="text-sm text-muted-foreground italic">No payments recorded for this invoice yet.</p>
+                                  <p className="text-sm text-muted-foreground italic">No payments recorded yet.</p>
                                 ) : (
                                   <div className="rounded-md border bg-background">
                                     <Table>
