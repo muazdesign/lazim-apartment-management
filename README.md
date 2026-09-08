@@ -1,4 +1,4 @@
-# Aptly — AI-Powered Apartment Management System
+# Lazim Rent Management — AI-Powered Apartment Management System
 
 A dashboard-centric management system for small apartment buildings, designed
 for **non-technical users**: plain-language labels, large click targets, and a
